@@ -1,0 +1,23 @@
+{
+  "name": "claude-agent-proxy",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A proxy that lets Claude Agent SDK use domestic Chinese LLMs (DeepSeek, Qwen, GLM, MiniMax) as backend",
+  "scripts": {
+    "dev": "tsx watch src/proxy.ts",
+    "build": "tsc",
+    "start": "node dist/proxy.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}

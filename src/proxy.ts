@@ -1,11 +1,8 @@
 /**
  * Claude API Proxy
  *
- * Converts Claude Messages API format to OpenAI-compatible format,
- * routing requests to domestic Chinese LLM providers.
- *
- * This allows using Claude Agent SDK's tool-use capabilities
- * with domestic LLMs (DeepSeek, Qwen, GLM, MiniMax) as backends.
+ * Proxies Anthropic Messages API requests to provider-native
+ * Anthropic-compatible endpoints without translating protocols.
  *
  * Usage:
  *   export ANTHROPIC_BASE_URL=http://localhost:8080
@@ -13,78 +10,146 @@
  */
 
 import "dotenv/config";
-import express from "express";
 import cors from "cors";
+import express from "express";
+import { Readable } from "node:stream";
+import { fileURLToPath } from "node:url";
 
-const app = express();
-app.use(cors());
-app.use(express.json({ limit: "50mb" }));
-
-// ========== Provider Configuration ==========
+const DEFAULT_ANTHROPIC_VERSION = "2023-06-01";
+const HOP_BY_HOP_RESPONSE_HEADERS = new Set([
+  "connection",
+  "content-encoding",
+  "content-length",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+]);
 
 interface ProviderConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
   name: string;
+  supportsAnthropicMessages: boolean;
+  anthropicMessagesError?: string;
 }
 
-const PROVIDERS: Record<string, ProviderConfig> = {
+function pickEnv(...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+    if (value) return value;
+  }
+
+  return undefined;
+}
+
+const PROVIDERS = {
   deepseek: {
-    baseUrl: "https://api.deepseek.com",
+    baseUrl:
+      pickEnv("DEEPSEEK_ANTHROPIC_BASE_URL") ||
+      "https://api.deepseek.com/anthropic",
     apiKey: process.env.DEEPSEEK_API_KEY || "",
-    model: "deepseek-chat",
+    model: pickEnv("DEEPSEEK_ANTHROPIC_MODEL") || "deepseek-chat",
     name: "DeepSeek",
+    supportsAnthropicMessages: true,
   },
   "deepseek-dashscope": {
-    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    baseUrl:
+      pickEnv(
+        "DEEPSEEK_DASHSCOPE_ANTHROPIC_BASE_URL",
+        "DASHSCOPE_ANTHROPIC_BASE_URL"
+      ) || "https://dashscope.aliyuncs.com/apps/anthropic",
     apiKey: process.env.DASHSCOPE_API_KEY || "",
-    model: "deepseek-v3",
+    model:
+      pickEnv(
+        "DEEPSEEK_DASHSCOPE_ANTHROPIC_MODEL",
+        "DASHSCOPE_DEEPSEEK_MODEL",
+        "DASHSCOPE_ANTHROPIC_MODEL"
+      ) || "deepseek-v3.2",
     name: "DeepSeek (DashScope)",
+    supportsAnthropicMessages: false,
+    anthropicMessagesError:
+      "DashScope DeepSeek does not support Anthropic /v1/messages",
   },
   qwen: {
-    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    baseUrl:
+      pickEnv("QWEN_ANTHROPIC_BASE_URL", "DASHSCOPE_ANTHROPIC_BASE_URL") ||
+      "https://dashscope.aliyuncs.com/apps/anthropic",
     apiKey: process.env.DASHSCOPE_API_KEY || process.env.QWEN_API_KEY || "",
-    model: "qwen3-max-2026-01-23",
+    model:
+      pickEnv("QWEN_ANTHROPIC_MODEL", "DASHSCOPE_ANTHROPIC_MODEL") ||
+      "qwen3.6-plus",
     name: "Qwen / 通义千问",
+    supportsAnthropicMessages: true,
   },
   "qwen-plus": {
-    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    baseUrl:
+      pickEnv(
+        "QWEN_PLUS_ANTHROPIC_BASE_URL",
+        "QWEN_ANTHROPIC_BASE_URL",
+        "DASHSCOPE_ANTHROPIC_BASE_URL"
+      ) || "https://dashscope.aliyuncs.com/apps/anthropic",
     apiKey: process.env.DASHSCOPE_API_KEY || process.env.QWEN_API_KEY || "",
-    model: "qwen3-plus",
-    name: "Qwen3 Plus (Fast)",
+    model:
+      pickEnv(
+        "QWEN_PLUS_ANTHROPIC_MODEL",
+        "QWEN_ANTHROPIC_MODEL",
+        "DASHSCOPE_ANTHROPIC_MODEL"
+      ) || "qwen3-plus",
+    name: "Qwen Plus (Fast)",
+    supportsAnthropicMessages: true,
   },
   glm: {
-    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    baseUrl:
+      pickEnv("GLM_ANTHROPIC_BASE_URL") ||
+      "https://open.bigmodel.cn/api/anthropic",
     apiKey: process.env.GLM_API_KEY || "",
-    model: "glm-4",
+    model: pickEnv("GLM_ANTHROPIC_MODEL") || "glm-4",
     name: "GLM / 智谱",
+    supportsAnthropicMessages: true,
   },
   minimax: {
-    baseUrl: "https://api.minimax.chat/v1",
+    baseUrl:
+      pickEnv("MINIMAX_ANTHROPIC_BASE_URL") ||
+      "https://api.minimaxi.com/anthropic",
     apiKey: process.env.MINIMAX_API_KEY || "",
-    model: "MiniMax-M2.7-highspeed",
+    model: pickEnv("MINIMAX_ANTHROPIC_MODEL") || "MiniMax-M2.7-highspeed",
     name: "MiniMax",
+    supportsAnthropicMessages: true,
   },
-};
+} satisfies Record<string, ProviderConfig>;
 
-// Current provider - can be switched at runtime
-let currentProvider = (process.env.PROVIDER as keyof typeof PROVIDERS) || "qwen";
+type ProviderKey = keyof typeof PROVIDERS;
 
-function getConfig(): ProviderConfig {
-  return PROVIDERS[currentProvider] || PROVIDERS.qwen;
+function isProviderKey(value: string | undefined): value is ProviderKey {
+  return Boolean(value && value in PROVIDERS);
+}
+
+let currentProvider: ProviderKey = isProviderKey(process.env.PROVIDER)
+  ? process.env.PROVIDER
+  : "qwen";
+
+function getConfig(provider: ProviderKey = currentProvider): ProviderConfig {
+  return PROVIDERS[provider] || PROVIDERS.qwen;
 }
 
 const initialConfig = getConfig();
 if (!initialConfig.apiKey) {
   console.warn(`Warning: API key not configured for provider: ${currentProvider}`);
-  console.warn(`Please set the appropriate environment variable in .env`);
+  console.warn("Please set the appropriate environment variable in .env");
+}
+if (!initialConfig.supportsAnthropicMessages) {
+  console.warn(
+    `Warning: ${initialConfig.anthropicMessagesError || `${initialConfig.name} does not support Anthropic /v1/messages`}`
+  );
 }
 
 console.log(`Using ${initialConfig.name} as backend`);
 console.log(`Model: ${initialConfig.model}`);
-
-// ========== Model Mapping ==========
 
 function getModelMap(): Record<string, string> {
   const cfg = getConfig();
@@ -101,522 +166,327 @@ function getModelMap(): Record<string, string> {
   };
 }
 
-// ========== Message Format Conversion ==========
-
-function convertMessages(claudeMessages: any[]): any[] {
-  const openaiMessages: any[] = [];
-
-  for (const msg of claudeMessages) {
-    if (typeof msg.content === "string") {
-      openaiMessages.push({ role: msg.role, content: msg.content });
-      continue;
-    }
-
-    if (Array.isArray(msg.content)) {
-      const textParts: string[] = [];
-      const toolCalls: any[] = [];
-
-      for (const block of msg.content) {
-        if (block.type === "text") {
-          textParts.push(block.text);
-        } else if (block.type === "tool_use") {
-          // Claude tool_use → OpenAI tool_calls
-          toolCalls.push({
-            id: block.id,
-            type: "function",
-            function: {
-              name: block.name,
-              arguments: JSON.stringify(block.input),
-            },
-          });
-        } else if (block.type === "tool_result") {
-          openaiMessages.push({
-            role: "tool",
-            tool_call_id: block.tool_use_id,
-            content:
-              typeof block.content === "string"
-                ? block.content
-                : JSON.stringify(block.content),
-          });
-          continue;
-        }
-      }
-
-      if (textParts.length > 0 || toolCalls.length > 0) {
-        const message: any = {
-          role: msg.role === "assistant" ? "assistant" : "user",
-          content: textParts.join("\n\n") || null,
-        };
-        if (toolCalls.length > 0 && msg.role === "assistant") {
-          message.tool_calls = toolCalls;
-        }
-        openaiMessages.push(message);
-      }
-    }
+function getTargetModel(requestedModel: unknown): string {
+  if (typeof requestedModel !== "string" || !requestedModel) {
+    return getConfig().model;
   }
 
-  return openaiMessages;
+  return getModelMap()[requestedModel] || requestedModel;
 }
 
-// ========== Tool Format Conversion ==========
-
-function convertTools(claudeTools: any[]): any[] {
-  if (!claudeTools || claudeTools.length === 0) return [];
-  return claudeTools.map((tool) => ({
-    type: "function",
-    function: {
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.input_schema,
-    },
-  }));
+function getHeaderValue(
+  value: string | string[] | undefined
+): string | undefined {
+  if (Array.isArray(value)) return value.join(",");
+  return value;
 }
 
-// ========== ID Generation ==========
-
-function generateId(): string {
-  return "msg_" + Math.random().toString(36).substring(2, 15);
-}
-
-function generateToolCallId(): string {
-  return "toolu_" + Math.random().toString(36).substring(2, 15);
-}
-
-// ========== Streaming Request Handler ==========
-
-async function handleStreamingRequest(
+function buildUpstreamHeaders(
   req: express.Request,
-  res: express.Response
-) {
-  let { model, messages, system, max_tokens = 4096, tools } = req.body;
-
-  // Cap max_tokens for provider limits
-  max_tokens = Math.min(max_tokens, 8000);
-
-  const config = getConfig();
-  const targetModel = getModelMap()[model] || config.model;
-
-  const openaiMessages: any[] = [];
-
-  if (system) {
-    const systemContent = Array.isArray(system)
-      ? system.map((s: any) => s.text || s).join("\n")
-      : system;
-    openaiMessages.push({ role: "system", content: systemContent });
-  }
-
-  openaiMessages.push(...convertMessages(messages));
-
-  const requestBody: any = {
-    model: targetModel,
-    messages: openaiMessages,
-    max_tokens,
-    stream: true,
-    temperature: 0,
+  stream: boolean,
+  apiKey: string
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    "x-api-key": apiKey,
+    "anthropic-version":
+      getHeaderValue(req.headers["anthropic-version"]) ||
+      DEFAULT_ANTHROPIC_VERSION,
+    accept:
+      getHeaderValue(req.headers.accept) ||
+      (stream ? "text/event-stream" : "application/json"),
   };
 
-  // Qwen3: disable thinking mode for faster responses
-  if (currentProvider === "qwen" || currentProvider === "qwen-plus" || currentProvider === "deepseek-dashscope") {
-    requestBody.extra_body = { enable_thinking: false };
+  const anthropicBeta = getHeaderValue(req.headers["anthropic-beta"]);
+  if (anthropicBeta) {
+    headers["anthropic-beta"] = anthropicBeta;
   }
 
-  // MiniMax M2.x: disable thinking mode
-  if (currentProvider === "minimax") {
-    requestBody.thinking_budget = 0;
-    requestBody.reasoning_split = true;
-  }
+  return headers;
+}
 
-  const openaiTools = convertTools(tools);
-  if (openaiTools.length > 0) {
-    requestBody.tools = openaiTools;
-  }
+function getUpstreamUrl(baseUrl: string): string {
+  return `${baseUrl.replace(/\/$/, "")}/v1/messages`;
+}
 
-  console.log(`\n[${new Date().toISOString()}] ${model} -> ${targetModel}`);
-  console.log(`Messages: ${openaiMessages.length}, Tools: ${openaiTools.length}`);
+function buildUpstreamBody(body: unknown, targetModel: string): Record<string, unknown> {
+  const normalized =
+    typeof body === "object" && body !== null ? { ...(body as Record<string, unknown>) } : {};
+  normalized.model = targetModel;
+  return normalized;
+}
 
-  async function fetchLLMStream() {
-    const response = await fetch(`${config.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return {
-        ok: false,
-        status: response.status,
-        errorText,
-        fullContent: "",
-        currentToolCalls: [] as any[],
-        inputTokens: 0,
-        outputTokens: 0,
-        hasReasoningContent: false,
-        chunkCount: 0,
-      };
-    }
-
-    let inputTokens = 0;
-    let outputTokens = 0;
-    let fullContent = "";
-    let currentToolCalls: any[] = [];
-    let hasReasoningContent = false;
-    let chunkCount = 0;
-
-    const reader = response.body?.getReader();
-    const decoder = new TextDecoder();
-
-    if (reader) {
-      let decodeBuffer = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        decodeBuffer += decoder.decode(value, { stream: true });
-        const lines = decodeBuffer.split("\n");
-        decodeBuffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6);
-            if (data === "[DONE]") continue;
-            try {
-              const chunk = JSON.parse(data);
-              const delta = chunk.choices?.[0]?.delta;
-              const finishReason = chunk.choices?.[0]?.finish_reason;
-              chunkCount++;
-
-              if (delta?.reasoning_content || delta?.reasoning_details) {
-                hasReasoningContent = true;
-                continue;
-              }
-              if (finishReason && !delta?.content && !delta?.tool_calls) continue;
-
-              if (delta?.content) {
-                fullContent += delta.content;
-                outputTokens += delta.content.length;
-              }
-
-              if (delta?.tool_calls) {
-                for (const tc of delta.tool_calls) {
-                  const idx = tc.index || 0;
-                  if (!currentToolCalls[idx]) {
-                    currentToolCalls[idx] = {
-                      id: tc.id || generateToolCallId(),
-                      name: tc.function?.name || "",
-                      arguments: "",
-                    };
-                  }
-                  if (tc.function?.name) currentToolCalls[idx].name = tc.function.name;
-                  if (tc.function?.arguments) currentToolCalls[idx].arguments += tc.function.arguments;
-                }
-              }
-
-              if (chunk.usage) {
-                inputTokens = chunk.usage.prompt_tokens || inputTokens;
-                outputTokens = chunk.usage.completion_tokens || outputTokens;
-              }
-            } catch {
-              // ignore parse errors
-            }
-          }
-        }
-      }
-    }
-
-    return { ok: true, fullContent, currentToolCalls, inputTokens, outputTokens, hasReasoningContent, chunkCount };
-  }
-
-  const MAX_RETRIES = 2;
-
-  try {
-    let result: Awaited<ReturnType<typeof fetchLLMStream>> | null = null;
-
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      result = await fetchLLMStream();
-
-      if (!result.ok) {
-        console.error(`API Error: ${result.status} ${result.errorText}`);
-        res.status(result.status || 500).json({
-          type: "error",
-          error: { type: "api_error", message: result.errorText },
-        });
-        return;
-      }
-
-      const isEmpty = !result.fullContent && result.currentToolCalls.length === 0;
-      if (!isEmpty) break;
-
-      if (attempt < MAX_RETRIES) {
-        const delay = (attempt + 1) * 1000;
-        console.warn(`[Proxy] Empty response (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${delay}ms...`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      } else {
-        console.error(`[Proxy] Empty response after ${MAX_RETRIES + 1} attempts`);
-      }
-    }
-
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-
-    const messageId = generateId();
-    const { fullContent, currentToolCalls, inputTokens, outputTokens } = result!;
-
-    // message_start
-    res.write(
-      `event: message_start\ndata: ${JSON.stringify({
-        type: "message_start",
-        message: {
-          id: messageId,
-          type: "message",
-          role: "assistant",
-          content: [],
-          model,
-          stop_reason: null,
-          stop_sequence: null,
-          usage: { input_tokens: 0, output_tokens: 0 },
-        },
-      })}\n\n`
-    );
-
-    // text content
-    if (fullContent) {
-      res.write(`event: content_block_start\ndata: ${JSON.stringify({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } })}\n\n`);
-      res.write(`event: content_block_delta\ndata: ${JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: fullContent } })}\n\n`);
-      res.write(`event: content_block_stop\ndata: ${JSON.stringify({ type: "content_block_stop", index: 0 })}\n\n`);
-    }
-
-    // tool calls
-    for (let i = 0; i < currentToolCalls.length; i++) {
-      const tc = currentToolCalls[i];
-      if (tc && tc.name) {
-        res.write(`event: content_block_start\ndata: ${JSON.stringify({ type: "content_block_start", index: i + 1, content_block: { type: "tool_use", id: tc.id, name: tc.name, input: {} } })}\n\n`);
-        if (tc.arguments) {
-          res.write(`event: content_block_delta\ndata: ${JSON.stringify({ type: "content_block_delta", index: i + 1, delta: { type: "input_json_delta", partial_json: tc.arguments } })}\n\n`);
-        }
-        res.write(`event: content_block_stop\ndata: ${JSON.stringify({ type: "content_block_stop", index: i + 1 })}\n\n`);
-      }
-    }
-
-    // message_delta
-    res.write(`event: message_delta\ndata: ${JSON.stringify({ type: "message_delta", delta: { stop_reason: currentToolCalls.length > 0 ? "tool_use" : "end_turn", stop_sequence: null }, usage: { output_tokens: outputTokens } })}\n\n`);
-
-    // message_stop
-    res.write(`event: message_stop\ndata: ${JSON.stringify({ type: "message_stop" })}\n\n`);
-
-    console.log(`Done: ${inputTokens}/${outputTokens} tokens, ${currentToolCalls.length} tool calls`);
-    res.end();
-  } catch (error: any) {
-    console.error("Request error:", error);
-    res.status(500).json({ type: "error", error: { type: "internal_error", message: error.message } });
+function copyUpstreamHeaders(
+  upstream: Response,
+  res: express.Response
+) {
+  for (const [key, value] of upstream.headers.entries()) {
+    if (HOP_BY_HOP_RESPONSE_HEADERS.has(key.toLowerCase())) continue;
+    res.setHeader(key, value);
   }
 }
 
-// ========== Non-Streaming Request Handler ==========
+function createProxyError(message: string) {
+  return {
+    type: "error",
+    error: {
+      type: "internal_error",
+      message,
+    },
+  };
+}
+
+function getAnthropicUnsupportedError(config: ProviderConfig) {
+  return {
+    type: "error",
+    error: {
+      type: "invalid_request_error",
+      message:
+        config.anthropicMessagesError ||
+        `${config.name} does not support Anthropic /v1/messages`,
+    },
+  };
+}
+
+function ensureAnthropicMessagesSupported(
+  res: express.Response,
+  provider: ProviderConfig
+): boolean {
+  if (provider.supportsAnthropicMessages) return true;
+
+  res.status(400).json(getAnthropicUnsupportedError(provider));
+  return false;
+}
 
 async function handleNonStreamingRequest(
   req: express.Request,
   res: express.Response
 ) {
-  let { model, messages, system, max_tokens = 4096, tools } = req.body;
-
-  max_tokens = Math.min(max_tokens, 8000);
-
   const config = getConfig();
-  const targetModel = getModelMap()[model] || config.model;
+  if (!ensureAnthropicMessagesSupported(res, config)) return;
 
-  const openaiMessages: any[] = [];
+  const targetModel = getTargetModel(req.body?.model);
+  const requestBody = buildUpstreamBody(req.body, targetModel);
 
-  if (system) {
-    const systemContent = Array.isArray(system)
-      ? system.map((s: any) => s.text || s).join("\n")
-      : system;
-    openaiMessages.push({ role: "system", content: systemContent });
-  }
-
-  openaiMessages.push(...convertMessages(messages));
-
-  const requestBody: any = {
-    model: targetModel,
-    messages: openaiMessages,
-    max_tokens,
-    stream: false,
-  };
-
-  if (currentProvider === "qwen" || currentProvider === "qwen-plus" || currentProvider === "deepseek-dashscope") {
-    requestBody.extra_body = { enable_thinking: false };
-  }
-  if (currentProvider === "minimax") {
-    requestBody.thinking_budget = 0;
-    requestBody.reasoning_split = true;
-  }
-
-  const openaiTools = convertTools(tools);
-  if (openaiTools.length > 0) {
-    requestBody.tools = openaiTools;
-  }
-
-  console.log(`\n[${new Date().toISOString()}] ${model} -> ${targetModel} (non-streaming)`);
+  console.log(`\n[${new Date().toISOString()}] ${String(req.body?.model || config.model)} -> ${targetModel} (non-streaming)`);
 
   try {
-    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+    const upstream = await fetch(getUpstreamUrl(config.baseUrl), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.apiKey}`,
-      },
+      headers: buildUpstreamHeaders(req, false, config.apiKey),
       body: JSON.stringify(requestBody),
     });
 
-    if (!response.ok) {
-      const error = await response.text();
-      console.error(`API Error: ${response.status} ${error}`);
-      res.status(response.status).json({ type: "error", error: { type: "api_error", message: error } });
-      return;
-    }
-
-    const text = await response.text();
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      throw new Error(`API returned invalid JSON: ${text.substring(0, 200)}`);
-    }
-
-    const message = data.choices?.[0]?.message;
-    const content = message?.content || "";
-    const toolCalls = message?.tool_calls || [];
-
-    const claudeContent: any[] = [];
-    if (content) claudeContent.push({ type: "text", text: content });
-
-    for (const tc of toolCalls) {
-      claudeContent.push({
-        type: "tool_use",
-        id: tc.id || generateToolCallId(),
-        name: tc.function.name,
-        input: JSON.parse(tc.function.arguments || "{}"),
-      });
-    }
-
-    const claudeResponse = {
-      id: generateId(),
-      type: "message",
-      role: "assistant",
-      content: claudeContent,
-      model,
-      stop_reason: toolCalls.length > 0 ? "tool_use" : "end_turn",
-      stop_sequence: null,
-      usage: {
-        input_tokens: data.usage?.prompt_tokens || 0,
-        output_tokens: data.usage?.completion_tokens || 0,
-      },
-    };
-
-    console.log(`Done: ${claudeResponse.usage.input_tokens}/${claudeResponse.usage.output_tokens} tokens`);
-    res.json(claudeResponse);
+    const payload = Buffer.from(await upstream.arrayBuffer());
+    copyUpstreamHeaders(upstream, res);
+    res.status(upstream.status).send(payload);
   } catch (error: any) {
     console.error("Request error:", error);
-    res.status(500).json({ type: "error", error: { type: "internal_error", message: error.message } });
+    res.status(500).json(createProxyError(error.message));
   }
 }
 
-// ========== Routes ==========
-
-app.get("/", (req, res) => {
+async function handleStreamingRequest(
+  req: express.Request,
+  res: express.Response
+) {
   const config = getConfig();
-  res.json({
-    name: "claude-agent-proxy",
-    status: "running",
-    provider: currentProvider,
-    model: config.model,
-    endpoints: {
-      messages: "POST /v1/messages",
-      health: "GET /health",
-      models: "GET /v1/models",
-      provider: "GET|POST /api/provider",
-    },
-  });
-});
+  if (!ensureAnthropicMessagesSupported(res, config)) return;
 
-app.post("/v1/messages", async (req, res) => {
-  if (req.body.stream) {
-    await handleStreamingRequest(req, res);
-  } else {
+  const targetModel = getTargetModel(req.body?.model);
+  const requestBody = buildUpstreamBody(req.body, targetModel);
+  const abortController = new AbortController();
+  let clientClosed = false;
+  let streamCompleted = false;
+
+  console.log(`\n[${new Date().toISOString()}] ${String(req.body?.model || config.model)} -> ${targetModel} (streaming)`);
+
+  res.on("close", () => {
+    if (streamCompleted) return;
+    clientClosed = true;
+    abortController.abort();
+  });
+
+  try {
+    const upstream = await fetch(getUpstreamUrl(config.baseUrl), {
+      method: "POST",
+      headers: buildUpstreamHeaders(req, true, config.apiKey),
+      body: JSON.stringify(requestBody),
+      signal: abortController.signal,
+    });
+
+    copyUpstreamHeaders(upstream, res);
+    res.status(upstream.status);
+
+    if (!upstream.body) {
+      streamCompleted = true;
+      res.end();
+      return;
+    }
+
+    const upstreamStream = Readable.fromWeb(upstream.body as any);
+    upstreamStream.on("error", (error) => {
+      if (clientClosed) return;
+      console.error("Upstream stream error:", error);
+      if (!res.writableEnded) res.end();
+    });
+
+    upstreamStream.pipe(res);
+
+    await new Promise<void>((resolve, reject) => {
+      upstreamStream.on("end", () => {
+        streamCompleted = true;
+        resolve();
+      });
+      upstreamStream.on("error", reject);
+      res.on("close", () => resolve());
+    });
+  } catch (error: any) {
+    const wasAborted =
+      error?.name === "AbortError" || abortController.signal.aborted;
+
+    if (clientClosed || wasAborted) {
+      console.warn("[Proxy] Client disconnected, streaming aborted");
+      return;
+    }
+
+    console.error("Request error:", error);
+    if (!res.headersSent) {
+      res.status(500).json(createProxyError(error.message));
+      return;
+    }
+
+    if (!res.writableEnded) res.end();
+  }
+}
+
+export function createApp() {
+  const app = express();
+
+  app.use(cors());
+  app.use(express.json({ limit: "50mb" }));
+
+  app.get("/", (_req, res) => {
+    const config = getConfig();
+    res.json({
+      name: "claude-agent-proxy",
+      status: "running",
+      provider: currentProvider,
+      model: config.model,
+      endpoints: {
+        messages: "POST /v1/messages",
+        health: "GET /health",
+        models: "GET /v1/models",
+        provider: "GET|POST /api/provider",
+      },
+    });
+  });
+
+  app.post("/v1/messages", async (req, res) => {
+    if (req.body?.stream) {
+      await handleStreamingRequest(req, res);
+      return;
+    }
+
     await handleNonStreamingRequest(req, res);
-  }
-});
-
-app.get("/health", (req, res) => {
-  const config = getConfig();
-  res.json({ status: "ok", provider: currentProvider, model: config.model });
-});
-
-app.get("/v1/models", (req, res) => {
-  res.json({
-    data: [
-      { id: "claude-opus-4-5-20251101", object: "model" },
-      { id: "claude-sonnet-4-20250514", object: "model" },
-      { id: "claude-3-5-sonnet-20241022", object: "model" },
-    ],
   });
-});
 
-app.get("/api/provider", (req, res) => {
-  const config = getConfig();
-  res.json({
-    provider: currentProvider,
-    model: config.model,
-    name: config.name,
-    baseUrl: config.baseUrl,
-    availableProviders: Object.keys(PROVIDERS),
+  app.get("/health", (_req, res) => {
+    const config = getConfig();
+    res.json({ status: "ok", provider: currentProvider, model: config.model });
   });
-});
 
-app.post("/api/provider", (req, res) => {
-  const { provider, model } = req.body;
-
-  let targetProvider = provider;
-  if (!targetProvider && model) {
-    const m = model.toLowerCase();
-    if (m.includes("qwen")) targetProvider = "qwen";
-    else if (m.includes("deepseek")) targetProvider = "deepseek";
-    else if (m.includes("glm")) targetProvider = "glm";
-    else if (m.includes("minimax") || m.includes("abab")) targetProvider = "minimax";
-  }
-
-  if (!targetProvider || !PROVIDERS[targetProvider]) {
-    return res.status(400).json({
-      error: `Unknown provider: ${targetProvider}`,
-      available: Object.keys(PROVIDERS),
+  app.get("/v1/models", (_req, res) => {
+    res.json({
+      data: [
+        { id: "claude-opus-4-5-20251101", object: "model" },
+        { id: "claude-sonnet-4-20250514", object: "model" },
+        { id: "claude-3-5-sonnet-20241022", object: "model" },
+      ],
     });
-  }
+  });
 
-  if (!PROVIDERS[targetProvider].apiKey) {
-    return res.status(400).json({
-      error: `API key not set for: ${targetProvider}`,
+  app.get("/api/provider", (_req, res) => {
+    const config = getConfig();
+    res.json({
+      provider: currentProvider,
+      model: config.model,
+      name: config.name,
+      baseUrl: config.baseUrl,
+      availableProviders: Object.keys(PROVIDERS),
     });
-  }
+  });
 
-  const old = currentProvider;
-  currentProvider = targetProvider;
-  console.log(`Provider: ${old} -> ${currentProvider}`);
+  app.post("/api/provider", (req, res) => {
+    const { provider, model } = (req.body ?? {}) as {
+      provider?: string;
+      model?: string;
+    };
 
-  const config = PROVIDERS[targetProvider];
-  res.json({ success: true, provider: currentProvider, model: config.model, name: config.name });
-});
+    let targetProvider = provider;
+    if (!targetProvider && model) {
+      const normalizedModel = model.toLowerCase();
+      if (normalizedModel.includes("qwen")) targetProvider = "qwen";
+      else if (normalizedModel.includes("deepseek")) targetProvider = "deepseek";
+      else if (normalizedModel.includes("glm")) targetProvider = "glm";
+      else if (normalizedModel.includes("minimax") || normalizedModel.includes("abab")) {
+        targetProvider = "minimax";
+      }
+    }
 
-// ========== Start ==========
+    if (!isProviderKey(targetProvider)) {
+      res.status(400).json({
+        error: `Unknown provider: ${targetProvider}`,
+        available: Object.keys(PROVIDERS),
+      });
+      return;
+    }
+
+    const targetConfig = getConfig(targetProvider);
+
+    if (!targetConfig.supportsAnthropicMessages) {
+      res.status(400).json({
+        error:
+          targetConfig.anthropicMessagesError ||
+          `Provider ${targetProvider} does not support Anthropic /v1/messages`,
+      });
+      return;
+    }
+
+    if (!targetConfig.apiKey) {
+      res.status(400).json({
+        error: `API key not set for: ${targetProvider}`,
+      });
+      return;
+    }
+
+    const oldProvider = currentProvider;
+    currentProvider = targetProvider;
+    console.log(`Provider: ${oldProvider} -> ${currentProvider}`);
+
+    res.json({
+      success: true,
+      provider: currentProvider,
+      model: targetConfig.model,
+      name: targetConfig.name,
+    });
+  });
+
+  return app;
+}
+
+export const app = createApp();
 
 const PORT = parseInt(process.env.PROXY_PORT || "8080", 10);
 
-app.listen(PORT, () => {
-  const cfg = getConfig();
-  console.log(`
+function isMainModule() {
+  return process.argv[1] === fileURLToPath(import.meta.url);
+}
+
+if (isMainModule()) {
+  app.listen(PORT, () => {
+    const cfg = getConfig();
+    console.log(`
 ╔════════════════════════════════════════════════╗
 ║         claude-agent-proxy                     ║
 ╠════════════════════════════════════════════════╣
@@ -628,4 +498,5 @@ app.listen(PORT, () => {
 ║  ANTHROPIC_API_KEY=any-string-works            ║
 ╚════════════════════════════════════════════════╝
   `);
-});
+  });
+}

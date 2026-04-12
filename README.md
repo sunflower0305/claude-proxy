@@ -2,7 +2,7 @@
 
 A lightweight proxy that lets you use **Claude Agent SDK** with domestic Chinese LLMs as the backend — no Anthropic API key required.
 
-It converts the Claude Messages API format to OpenAI-compatible format and routes requests to DeepSeek, Qwen, GLM, or MiniMax.
+It accepts Claude Messages API requests and forwards them to provider-native Anthropic-compatible `/v1/messages` endpoints for DeepSeek, Qwen, GLM, or MiniMax.
 
 ## Why
 

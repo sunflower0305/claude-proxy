@@ -10,14 +10,13 @@ It converts the Claude Messages API format to OpenAI-compatible format and route
 
 ## Supported Providers
 
-| Provider | env key | Models |
-|----------|---------|--------|
-| `qwen` | `DASHSCOPE_API_KEY` | qwen3-max |
+| Provider    | env key             | Models                       |
+| ----------- | ------------------- | ---------------------------- |
+| `qwen`      | `DASHSCOPE_API_KEY` | qwen3-max                    |
 | `qwen-plus` | `DASHSCOPE_API_KEY` | qwen3-plus (faster, cheaper) |
-| `deepseek` | `DEEPSEEK_API_KEY` | deepseek-chat |
-| `deepseek-dashscope` | `DASHSCOPE_API_KEY` | deepseek-v3 via DashScope |
-| `glm` | `GLM_API_KEY` | glm-4 |
-| `minimax` | `MINIMAX_API_KEY` | MiniMax-M2.7-highspeed |
+| `deepseek`  | `DEEPSEEK_API_KEY`  | deepseek-chat                |
+| `glm`       | `GLM_API_KEY`       | glm-4                        |
+| `minimax`   | `MINIMAX_API_KEY`   | MiniMax-M2.7-highspeed       |
 
 ## Quick Start
 
@@ -66,12 +65,12 @@ curl -X POST http://localhost:8080/api/provider \
 
 ## Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/v1/messages` | Claude Messages API (streaming + non-streaming) |
-| `GET` | `/health` | Health check |
-| `GET` | `/v1/models` | List available models |
-| `GET/POST` | `/api/provider` | Get or switch current provider |
+| Method     | Path            | Description                                     |
+| ---------- | --------------- | ----------------------------------------------- |
+| `POST`     | `/v1/messages`  | Claude Messages API (streaming + non-streaming) |
+| `GET`      | `/health`       | Health check                                    |
+| `GET`      | `/v1/models`    | List available models                           |
+| `GET/POST` | `/api/provider` | Get or switch current provider                  |
 
 ## Features
 
@@ -91,7 +90,7 @@ MIT
 
 If you have questions, ideas, or want to collaborate:
 
-| | |
-|---|---|
-| 📧 Email | 3268007793@qq.com |
-| 📱 Phone / WeChat | 18550207121 |
+|                   |                   |
+| ----------------- | ----------------- |
+| 📧 Email          | 3268007793@qq.com |
+| 📱 Phone / WeChat | 18550207121       |

@@ -338,6 +338,119 @@ describe.sequential("proxy local integration", () => {
     expect("reasoning_split" in forwardedRequest!.body).toBe(false);
   });
 
+  it.each([
+    "claude-sonnet-4-6",
+    "claude-opus-4-6",
+    "claude-haiku-4-5",
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-5-20250929",
+    "opus",
+    "sonnet",
+    "haiku",
+  ])("maps Claude family alias %s to the current provider model", async (model) => {
+    await switchProvider(harness.proxyBaseUrl, "deepseek");
+
+    const response = await fetch(`${harness.proxyBaseUrl}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": "client-placeholder",
+      },
+      body: JSON.stringify({
+        ...harness.requestPayload,
+        model,
+        metadata: { case: "success", trace_id: model },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      model: upstreamModel,
+      metadata_echo: { case: "success", trace_id: model },
+    });
+
+    const forwardedRequest = harness.recordedRequests.at(-1);
+    expect(forwardedRequest?.body.model).toBe(upstreamModel);
+  });
+
+  it("does not remap non-Claude model names that only contain a Claude family word", async () => {
+    await switchProvider(harness.proxyBaseUrl, "deepseek");
+
+    const response = await fetch(`${harness.proxyBaseUrl}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": "client-placeholder",
+      },
+      body: JSON.stringify({
+        ...harness.requestPayload,
+        model: "custom-sonnet-proxy",
+        metadata: { case: "success", trace_id: "custom-sonnet-proxy" },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      model: "custom-sonnet-proxy",
+      metadata_echo: { case: "success", trace_id: "custom-sonnet-proxy" },
+    });
+
+    const forwardedRequest = harness.recordedRequests.at(-1);
+    expect(forwardedRequest?.body.model).toBe("custom-sonnet-proxy");
+  });
+
+  it("passes through provider-native model names unchanged", async () => {
+    await switchProvider(harness.proxyBaseUrl, "deepseek");
+
+    const response = await fetch(`${harness.proxyBaseUrl}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": "client-placeholder",
+      },
+      body: JSON.stringify({
+        ...harness.requestPayload,
+        model: upstreamModel,
+        metadata: { case: "success", trace_id: "provider-native" },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      model: upstreamModel,
+      metadata_echo: { case: "success", trace_id: "provider-native" },
+    });
+
+    const forwardedRequest = harness.recordedRequests.at(-1);
+    expect(forwardedRequest?.body.model).toBe(upstreamModel);
+  });
+
+  it("falls back to the current provider model when request model is not a string", async () => {
+    await switchProvider(harness.proxyBaseUrl, "deepseek");
+
+    const response = await fetch(`${harness.proxyBaseUrl}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": "client-placeholder",
+      },
+      body: JSON.stringify({
+        ...harness.requestPayload,
+        model: 12345,
+        metadata: { case: "success", trace_id: "numeric-model" },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      model: upstreamModel,
+      metadata_echo: { case: "success", trace_id: "numeric-model" },
+    });
+
+    const forwardedRequest = harness.recordedRequests.at(-1);
+    expect(forwardedRequest?.body.model).toBe(upstreamModel);
+  });
+
   it("passes through upstream sse stream unchanged", async () => {
     await switchProvider(harness.proxyBaseUrl, "deepseek");
 

@@ -151,27 +151,30 @@ if (!initialConfig.supportsAnthropicMessages) {
 console.log(`Using ${initialConfig.name} as backend`);
 console.log(`Model: ${initialConfig.model}`);
 
-function getModelMap(): Record<string, string> {
-  const cfg = getConfig();
-  return {
-    "claude-opus-4-5-20251101": cfg.model,
-    "claude-sonnet-4-20250514": cfg.model,
-    "claude-3-5-sonnet-20241022": cfg.model,
-    "claude-3-opus-20240229": cfg.model,
-    "claude-3-sonnet-20240229": cfg.model,
-    "claude-3-haiku-20240307": cfg.model,
-    opus: cfg.model,
-    sonnet: cfg.model,
-    haiku: cfg.model,
-  };
-}
-
 function getTargetModel(requestedModel: unknown): string {
   if (typeof requestedModel !== "string" || !requestedModel) {
     return getConfig().model;
   }
 
-  return getModelMap()[requestedModel] || requestedModel;
+  const normalizedModel = requestedModel.toLowerCase();
+  if (
+    normalizedModel === "opus" ||
+    normalizedModel === "sonnet" ||
+    normalizedModel === "haiku"
+  ) {
+    return getConfig().model;
+  }
+
+  if (
+    normalizedModel.startsWith("claude-") &&
+    (normalizedModel.includes("-opus") ||
+      normalizedModel.includes("-sonnet") ||
+      normalizedModel.includes("-haiku"))
+  ) {
+    return getConfig().model;
+  }
+
+  return requestedModel;
 }
 
 function getHeaderValue(

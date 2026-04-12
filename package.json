@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "tsx watch src/proxy.ts",
     "build": "tsc",
-    "start": "node dist/proxy.js"
+    "start": "node dist/proxy.js",
+    "test": "vitest run",
+    "test:proxy-local": "vitest run tests/integration/proxy-local.test.ts",
+    "test:provider-anthropic": "node --experimental-strip-types tests/integration/provider-anthropic.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -18,6 +21,7 @@
     "@types/express": "^4.17.21",
     "@types/node": "^22.0.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^3.2.4"
   }
 }

@@ -74,7 +74,7 @@ curl -X POST http://localhost:8080/api/provider \
 
 ## Features
 
-- Full tool use support (Claude `tool_use` ↔ OpenAI `tool_calls`)
+- Anthropic tool use passthrough for Anthropic-compatible `/v1/messages` providers
 - Streaming and non-streaming responses
 - Automatic retry on empty responses (up to 2 retries)
 - Thinking mode disabled by default for faster responses

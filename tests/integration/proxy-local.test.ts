@@ -1,0 +1,422 @@
+import http, {
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from "node:http";
+import { once } from "node:events";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+
+interface RecordedRequest {
+  headers: IncomingMessage["headers"];
+  body: any;
+}
+
+interface TestHarness {
+  proxyBaseUrl: string;
+  upstreamPort: number;
+  recordedRequests: RecordedRequest[];
+  requestPayload: Record<string, unknown>;
+  ssePayload: string;
+  close(): Promise<void>;
+}
+
+const upstreamApiKey = "provider-secret";
+const upstreamModel = "deepseek-chat-native";
+const testEnvKeys = [
+  "PROVIDER",
+  "DEEPSEEK_API_KEY",
+  "DEEPSEEK_ANTHROPIC_MODEL",
+  "DEEPSEEK_ANTHROPIC_BASE_URL",
+  "DASHSCOPE_API_KEY",
+  "DEEPSEEK_DASHSCOPE_ANTHROPIC_BASE_URL",
+] as const;
+
+function createSsePayload() {
+  return [
+    'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_123","type":"message","role":"assistant","content":[],"model":"deepseek-chat-native","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":0}}}\n\n',
+    'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
+    'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"OK"}}\n\n',
+    'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
+    'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+  ].join("");
+}
+
+function buildRequestPayload() {
+  return {
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 128,
+    system: [{ type: "text", text: "You are a helpful assistant." }],
+    messages: [
+      {
+        role: "user",
+        content: [{ type: "text", text: "Reply with exactly OK." }],
+      },
+    ],
+    tools: [
+      {
+        name: "echo",
+        description: "Echo input",
+        input_schema: {
+          type: "object",
+          properties: { text: { type: "string" } },
+          required: ["text"],
+        },
+      },
+    ],
+    tool_choice: { type: "auto" },
+    thinking: { type: "enabled", budget_tokens: 32 },
+    metadata: { case: "success", trace_id: "trace-1" },
+  };
+}
+
+async function readJsonBody(req: IncomingMessage) {
+  const chunks: Buffer[] = [];
+
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  const raw = Buffer.concat(chunks).toString("utf8");
+  return raw ? JSON.parse(raw) : {};
+}
+
+function startServer(server: Server): Promise<number> {
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        reject(new Error("Failed to determine listening port"));
+        return;
+      }
+      resolve(address.port);
+    });
+  });
+}
+
+function closeServer(server: Server) {
+  return new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+function writeJson(
+  res: ServerResponse,
+  status: number,
+  payload: unknown,
+  headers?: Record<string, string>
+) {
+  res.statusCode = status;
+  res.setHeader("content-type", "application/json");
+  if (headers) {
+    for (const [key, value] of Object.entries(headers)) {
+      res.setHeader(key, value);
+    }
+  }
+  res.end(JSON.stringify(payload));
+}
+
+function setEnv(key: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[key];
+    return;
+  }
+
+  process.env[key] = value;
+}
+
+async function createHarness(): Promise<TestHarness> {
+  const recordedRequests: RecordedRequest[] = [];
+  const ssePayload = createSsePayload();
+  const upstream = http.createServer(async (req, res) => {
+    if (req.method !== "POST" || req.url !== "/v1/messages") {
+      writeJson(res, 404, {
+        type: "error",
+        error: { type: "not_found_error", message: "missing" },
+      });
+      return;
+    }
+
+    const body = await readJsonBody(req);
+    recordedRequests.push({ headers: req.headers, body });
+
+    if (body?.metadata?.case === "error") {
+      writeJson(res, 422, {
+        type: "error",
+        error: {
+          type: "invalid_request_error",
+          message: "upstream rejected request",
+        },
+      });
+      return;
+    }
+
+    if (body?.stream) {
+      res.statusCode = 200;
+      res.setHeader("content-type", "text/event-stream; charset=utf-8");
+      res.setHeader("cache-control", "no-cache");
+      res.end(ssePayload);
+      return;
+    }
+
+    writeJson(
+      res,
+      200,
+      {
+        id: "msg_upstream",
+        type: "message",
+        role: "assistant",
+        model: body.model,
+        content: [{ type: "text", text: "OK" }],
+        stop_reason: "end_turn",
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 1 },
+        metadata_echo: body.metadata,
+      },
+      { "x-upstream-id": "mock-upstream" }
+    );
+  });
+  const upstreamPort = await startServer(upstream);
+
+  const envBackup = Object.fromEntries(
+    testEnvKeys.map((key) => [key, process.env[key]])
+  ) as Record<(typeof testEnvKeys)[number], string | undefined>;
+
+  setEnv("PROVIDER", "deepseek-dashscope");
+  setEnv("DEEPSEEK_API_KEY", upstreamApiKey);
+  setEnv("DEEPSEEK_ANTHROPIC_MODEL", upstreamModel);
+  setEnv("DEEPSEEK_ANTHROPIC_BASE_URL", `http://127.0.0.1:${upstreamPort}`);
+  setEnv("DASHSCOPE_API_KEY", "dashscope-secret");
+  setEnv(
+    "DEEPSEEK_DASHSCOPE_ANTHROPIC_BASE_URL",
+    `http://127.0.0.1:${upstreamPort}`
+  );
+
+  vi.resetModules();
+  const { createApp } = await import("../../src/proxy.ts");
+  const proxy = createApp().listen(0, "127.0.0.1");
+  await once(proxy, "listening");
+
+  const proxyAddress = proxy.address();
+  if (!proxyAddress || typeof proxyAddress === "string") {
+    throw new Error("Failed to determine proxy port");
+  }
+
+  return {
+    proxyBaseUrl: `http://127.0.0.1:${proxyAddress.port}`,
+    upstreamPort,
+    recordedRequests,
+    requestPayload: buildRequestPayload(),
+    ssePayload,
+    async close() {
+      await closeServer(proxy);
+      await closeServer(upstream);
+      for (const key of testEnvKeys) {
+        setEnv(key, envBackup[key]);
+      }
+      vi.resetModules();
+    },
+  };
+}
+
+async function switchProvider(baseUrl: string, provider: string) {
+  return fetch(`${baseUrl}/api/provider`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ provider }),
+  });
+}
+
+describe.sequential("proxy local integration", () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await createHarness();
+  });
+
+  afterEach(async () => {
+    await harness.close();
+  });
+
+  it("returns unsupported error when startup provider is deepseek-dashscope", async () => {
+    const response = await fetch(`${harness.proxyBaseUrl}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": "client-placeholder",
+      },
+      body: JSON.stringify(harness.requestPayload),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        message: "DashScope DeepSeek does not support Anthropic /v1/messages",
+      },
+    });
+    expect(harness.recordedRequests).toHaveLength(0);
+  });
+
+  it("switches provider to deepseek successfully", async () => {
+    const response = await switchProvider(harness.proxyBaseUrl, "deepseek");
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      provider: "deepseek",
+      model: upstreamModel,
+      name: "DeepSeek",
+    });
+  });
+
+  it("passes through non-stream anthropic request", async () => {
+    await switchProvider(harness.proxyBaseUrl, "deepseek");
+
+    const response = await fetch(`${harness.proxyBaseUrl}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": "client-placeholder",
+        "anthropic-beta": "tools-2024-04-04",
+      },
+      body: JSON.stringify(harness.requestPayload),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type") || "").toMatch(
+      /^application\/json/i
+    );
+    expect(response.headers.get("x-upstream-id")).toBe("mock-upstream");
+
+    await expect(response.json()).resolves.toMatchObject({
+      model: upstreamModel,
+      metadata_echo: harness.requestPayload.metadata,
+    });
+
+    const forwardedRequest = harness.recordedRequests.at(-1);
+    expect(forwardedRequest).toBeTruthy();
+    expect(forwardedRequest?.headers["x-api-key"]).toBe(upstreamApiKey);
+    expect(forwardedRequest?.headers["anthropic-version"]).toBe("2023-06-01");
+    expect(forwardedRequest?.headers["anthropic-beta"]).toBe(
+      "tools-2024-04-04"
+    );
+    expect(forwardedRequest?.body.model).toBe(upstreamModel);
+    expect(forwardedRequest?.body.system).toEqual(harness.requestPayload.system);
+    expect(forwardedRequest?.body.messages).toEqual(
+      harness.requestPayload.messages
+    );
+    expect(forwardedRequest?.body.tools).toEqual(harness.requestPayload.tools);
+    expect(forwardedRequest?.body.tool_choice).toEqual(
+      harness.requestPayload.tool_choice
+    );
+    expect(forwardedRequest?.body.thinking).toEqual(
+      harness.requestPayload.thinking
+    );
+    expect(forwardedRequest?.body.metadata).toEqual(
+      harness.requestPayload.metadata
+    );
+    expect("extra_body" in forwardedRequest!.body).toBe(false);
+    expect("thinking_budget" in forwardedRequest!.body).toBe(false);
+    expect("reasoning_split" in forwardedRequest!.body).toBe(false);
+  });
+
+  it("passes through upstream sse stream unchanged", async () => {
+    await switchProvider(harness.proxyBaseUrl, "deepseek");
+
+    const response = await fetch(`${harness.proxyBaseUrl}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": "client-placeholder",
+      },
+      body: JSON.stringify({
+        ...harness.requestPayload,
+        stream: true,
+        metadata: { case: "stream", trace_id: "trace-2" },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type") || "").toMatch(
+      /^text\/event-stream/i
+    );
+    await expect(response.text()).resolves.toBe(harness.ssePayload);
+  });
+
+  it("rejects switching back to deepseek-dashscope without changing current provider", async () => {
+    await switchProvider(harness.proxyBaseUrl, "deepseek");
+
+    const unsupportedResponse = await switchProvider(
+      harness.proxyBaseUrl,
+      "deepseek-dashscope"
+    );
+
+    expect(unsupportedResponse.status).toBe(400);
+    await expect(unsupportedResponse.json()).resolves.toEqual({
+      error: "DashScope DeepSeek does not support Anthropic /v1/messages",
+    });
+
+    const currentProviderResponse = await fetch(
+      `${harness.proxyBaseUrl}/api/provider`
+    );
+
+    expect(currentProviderResponse.status).toBe(200);
+    await expect(currentProviderResponse.json()).resolves.toEqual({
+      provider: "deepseek",
+      model: upstreamModel,
+      name: "DeepSeek",
+      baseUrl: `http://127.0.0.1:${harness.upstreamPort}`,
+      availableProviders: [
+        "deepseek",
+        "deepseek-dashscope",
+        "qwen",
+        "qwen-plus",
+        "glm",
+        "minimax",
+      ],
+    });
+  });
+
+  it("passes through upstream anthropic error payload", async () => {
+    await switchProvider(harness.proxyBaseUrl, "deepseek");
+
+    const response = await fetch(`${harness.proxyBaseUrl}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": "client-placeholder",
+      },
+      body: JSON.stringify({
+        ...harness.requestPayload,
+        metadata: { case: "error", trace_id: "trace-3" },
+      }),
+    });
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toEqual({
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        message: "upstream rejected request",
+      },
+    });
+  });
+});

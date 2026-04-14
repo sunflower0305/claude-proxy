@@ -28,8 +28,6 @@ const testEnvKeys = [
   "DEEPSEEK_API_KEY",
   "DEEPSEEK_ANTHROPIC_MODEL",
   "DEEPSEEK_ANTHROPIC_BASE_URL",
-  "DASHSCOPE_API_KEY",
-
   "KIMI_API_KEY",
   "KIMI_ANTHROPIC_MODEL",
   "KIMI_ANTHROPIC_BASE_URL",
@@ -193,15 +191,10 @@ async function createHarness(): Promise<TestHarness> {
     testEnvKeys.map((key) => [key, process.env[key]])
   ) as Record<(typeof testEnvKeys)[number], string | undefined>;
 
-  setEnv("PROVIDER", "deepseek-dashscope");
+  setEnv("PROVIDER", "deepseek");
   setEnv("DEEPSEEK_API_KEY", upstreamApiKey);
   setEnv("DEEPSEEK_ANTHROPIC_MODEL", upstreamModel);
   setEnv("DEEPSEEK_ANTHROPIC_BASE_URL", `http://127.0.0.1:${upstreamPort}`);
-  setEnv("DASHSCOPE_API_KEY", "dashscope-secret");
-  setEnv(
-    "DEEPSEEK_DASHSCOPE_ANTHROPIC_BASE_URL",
-    `http://127.0.0.1:${upstreamPort}`
-  );
   setEnv("KIMI_API_KEY", upstreamApiKey);
   setEnv("KIMI_ANTHROPIC_MODEL", kimiUpstreamModel);
   setEnv("KIMI_ANTHROPIC_BASE_URL", `http://127.0.0.1:${upstreamPort}`);
@@ -264,27 +257,6 @@ describe.sequential("proxy local integration", () => {
     await harness.close();
   });
 
-  it("returns unsupported error when startup provider is deepseek-dashscope", async () => {
-    const response = await fetch(`${harness.proxyBaseUrl}/v1/messages`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": "client-placeholder",
-      },
-      body: JSON.stringify(harness.requestPayload),
-    });
-
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      type: "error",
-      error: {
-        type: "invalid_request_error",
-        message: "DashScope DeepSeek does not support Anthropic /v1/messages",
-      },
-    });
-    expect(harness.recordedRequests).toHaveLength(0);
-  });
-
   it("switches provider to deepseek successfully", async () => {
     const response = await switchProvider(harness.proxyBaseUrl, "deepseek");
 
@@ -305,7 +277,7 @@ describe.sequential("proxy local integration", () => {
       success: true,
       provider: "kimi",
       model: kimiUpstreamModel,
-      name: "Kimi / Moonshot",
+      name: "Kimi",
     });
   });
 
@@ -328,11 +300,10 @@ describe.sequential("proxy local integration", () => {
     await expect(providerResponse.json()).resolves.toEqual({
       provider: "kimi",
       model: kimiUpstreamModel,
-      name: "Kimi / Moonshot",
+      name: "Kimi",
       baseUrl: `http://127.0.0.1:${harness.upstreamPort}`,
       availableProviders: [
         "deepseek",
-        "deepseek-dashscope",
         "qwen",
         "qwen-plus",
         "glm",
@@ -627,17 +598,18 @@ describe.sequential("proxy local integration", () => {
     });
   });
 
-  it("rejects switching back to deepseek-dashscope without changing current provider", async () => {
+  it("rejects switching to an unknown provider without changing current provider", async () => {
     await switchProvider(harness.proxyBaseUrl, "deepseek");
 
     const unsupportedResponse = await switchProvider(
       harness.proxyBaseUrl,
-      "deepseek-dashscope"
+      "unknown-provider"
     );
 
     expect(unsupportedResponse.status).toBe(400);
     await expect(unsupportedResponse.json()).resolves.toEqual({
-      error: "DashScope DeepSeek does not support Anthropic /v1/messages",
+      error: "Unknown provider: unknown-provider",
+      available: ["deepseek", "qwen", "qwen-plus", "glm", "minimax", "kimi"],
     });
 
     const currentProviderResponse = await fetch(
@@ -652,7 +624,6 @@ describe.sequential("proxy local integration", () => {
       baseUrl: `http://127.0.0.1:${harness.upstreamPort}`,
       availableProviders: [
         "deepseek",
-        "deepseek-dashscope",
         "qwen",
         "qwen-plus",
         "glm",

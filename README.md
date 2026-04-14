@@ -2,7 +2,7 @@
 
 A lightweight proxy that lets you use Claude code or **Claude Agent SDK** with domestic Chinese LLMs as the backend — no Anthropic API key required.
 
-It accepts Claude Messages API requests and forwards them to provider-native Anthropic-compatible `/v1/messages` endpoints for DeepSeek, Qwen, GLM, or MiniMax.
+It accepts Claude Messages API requests and forwards them to provider-native Anthropic-compatible `/v1/messages` endpoints for DeepSeek, Qwen, GLM, MiniMax, or Kimi.
 
 ## Why
 
@@ -17,6 +17,7 @@ It accepts Claude Messages API requests and forwards them to provider-native Ant
 | `deepseek`  | `DEEPSEEK_API_KEY`  | deepseek-chat               |
 | `glm`       | `GLM_API_KEY`       | glm-5                       |
 | `minimax`   | `MINIMAX_API_KEY`   | MiniMax-M2.7-highspeed      |
+| `kimi`      | `KIMI_API_KEY`      | kimi-k2.5                   |
 
 ## Quick Start
 

@@ -57,24 +57,7 @@ const PROVIDERS = {
     name: "DeepSeek",
     supportsAnthropicMessages: true,
   },
-  "deepseek-dashscope": {
-    baseUrl:
-      pickEnv(
-        "DEEPSEEK_DASHSCOPE_ANTHROPIC_BASE_URL",
-        "DASHSCOPE_ANTHROPIC_BASE_URL"
-      ) || "https://dashscope.aliyuncs.com/apps/anthropic",
-    apiKey: process.env.DASHSCOPE_API_KEY || "",
-    model:
-      pickEnv(
-        "DEEPSEEK_DASHSCOPE_ANTHROPIC_MODEL",
-        "DASHSCOPE_DEEPSEEK_MODEL",
-        "DASHSCOPE_ANTHROPIC_MODEL"
-      ) || "deepseek-v3.2",
-    name: "DeepSeek (DashScope)",
-    supportsAnthropicMessages: false,
-    anthropicMessagesError:
-      "DashScope DeepSeek does not support Anthropic /v1/messages",
-  },
+
   qwen: {
     baseUrl:
       pickEnv("QWEN_ANTHROPIC_BASE_URL", "DASHSCOPE_ANTHROPIC_BASE_URL") ||
@@ -121,6 +104,14 @@ const PROVIDERS = {
     name: "MiniMax",
     supportsAnthropicMessages: true,
   },
+  kimi: {
+    baseUrl:
+      pickEnv("KIMI_ANTHROPIC_BASE_URL") || "https://api.moonshot.cn/anthropic",
+    apiKey: process.env.KIMI_API_KEY || "",
+    model: pickEnv("KIMI_ANTHROPIC_MODEL") || "kimi-k2.5",
+    name: "Kimi",
+    supportsAnthropicMessages: true,
+  },
 } satisfies Record<string, ProviderConfig>;
 
 type ProviderKey = keyof typeof PROVIDERS;
@@ -139,7 +130,9 @@ function getConfig(provider: ProviderKey = currentProvider): ProviderConfig {
 
 const initialConfig = getConfig();
 if (!initialConfig.apiKey) {
-  console.warn(`Warning: API key not configured for provider: ${currentProvider}`);
+  console.warn(
+    `Warning: API key not configured for provider: ${currentProvider}`
+  );
   console.warn("Please set the appropriate environment variable in .env");
 }
 if (!initialConfig.supportsAnthropicMessages) {
@@ -212,17 +205,19 @@ function getUpstreamUrl(baseUrl: string): string {
   return `${baseUrl.replace(/\/$/, "")}/v1/messages`;
 }
 
-function buildUpstreamBody(body: unknown, targetModel: string): Record<string, unknown> {
+function buildUpstreamBody(
+  body: unknown,
+  targetModel: string
+): Record<string, unknown> {
   const normalized =
-    typeof body === "object" && body !== null ? { ...(body as Record<string, unknown>) } : {};
+    typeof body === "object" && body !== null
+      ? { ...(body as Record<string, unknown>) }
+      : {};
   normalized.model = targetModel;
   return normalized;
 }
 
-function copyUpstreamHeaders(
-  upstream: Response,
-  res: express.Response
-) {
+function copyUpstreamHeaders(upstream: Response, res: express.Response) {
   for (const [key, value] of upstream.headers.entries()) {
     if (HOP_BY_HOP_RESPONSE_HEADERS.has(key.toLowerCase())) continue;
     res.setHeader(key, value);
@@ -271,7 +266,9 @@ async function handleNonStreamingRequest(
   const targetModel = getTargetModel(req.body?.model);
   const requestBody = buildUpstreamBody(req.body, targetModel);
 
-  console.log(`\n[${new Date().toISOString()}] ${String(req.body?.model || config.model)} -> ${targetModel} (non-streaming)`);
+  console.log(
+    `\n[${new Date().toISOString()}] ${String(req.body?.model || config.model)} -> ${targetModel} (non-streaming)`
+  );
 
   try {
     const upstream = await fetch(getUpstreamUrl(config.baseUrl), {
@@ -302,7 +299,9 @@ async function handleStreamingRequest(
   let clientClosed = false;
   let streamCompleted = false;
 
-  console.log(`\n[${new Date().toISOString()}] ${String(req.body?.model || config.model)} -> ${targetModel} (streaming)`);
+  console.log(
+    `\n[${new Date().toISOString()}] ${String(req.body?.model || config.model)} -> ${targetModel} (streaming)`
+  );
 
   res.on("close", () => {
     if (streamCompleted) return;
@@ -429,10 +428,19 @@ export function createApp() {
     let targetProvider = provider;
     if (!targetProvider && model) {
       const normalizedModel = model.toLowerCase();
-      if (normalizedModel.includes("qwen")) targetProvider = "qwen";
-      else if (normalizedModel.includes("deepseek")) targetProvider = "deepseek";
+      if (
+        normalizedModel.includes("kimi") ||
+        normalizedModel.includes("moonshot")
+      ) {
+        targetProvider = "kimi";
+      } else if (normalizedModel.includes("qwen")) targetProvider = "qwen";
+      else if (normalizedModel.includes("deepseek"))
+        targetProvider = "deepseek";
       else if (normalizedModel.includes("glm")) targetProvider = "glm";
-      else if (normalizedModel.includes("minimax") || normalizedModel.includes("abab")) {
+      else if (
+        normalizedModel.includes("minimax") ||
+        normalizedModel.includes("abab")
+      ) {
         targetProvider = "minimax";
       }
     }

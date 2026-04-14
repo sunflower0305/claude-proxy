@@ -1,6 +1,6 @@
 # claude-proxy
 
-A lightweight proxy that lets you use **Claude Agent SDK** with domestic Chinese LLMs as the backend — no Anthropic API key required.
+A lightweight proxy that lets you use Claude code or **Claude Agent SDK** with domestic Chinese LLMs as the backend — no Anthropic API key required.
 
 It accepts Claude Messages API requests and forwards them to provider-native Anthropic-compatible `/v1/messages` endpoints for DeepSeek, Qwen, GLM, or MiniMax.
 

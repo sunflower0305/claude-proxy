@@ -1,5 +1,5 @@
 {
-  "name": "claude-agent-proxy",
+  "name": "claude-proxy",
   "version": "1.0.0",
   "type": "module",
   "description": "A proxy that lets Claude Agent SDK use domestic Chinese LLMs (DeepSeek, Qwen, GLM, MiniMax) as backend",

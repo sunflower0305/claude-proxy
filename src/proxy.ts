@@ -372,7 +372,7 @@ export function createApp() {
   app.get("/", (_req, res) => {
     const config = getConfig();
     res.json({
-      name: "claude-agent-proxy",
+      name: "claude-proxy",
       status: "running",
       provider: currentProvider,
       model: config.model,
@@ -491,7 +491,7 @@ if (isMainModule()) {
     const cfg = getConfig();
     console.log(`
 ╔════════════════════════════════════════════════╗
-║         claude-agent-proxy                     ║
+║         claude-proxy                           ║
 ╠════════════════════════════════════════════════╣
 ║  http://localhost:${PORT}
 ║  Backend: ${cfg.name} (${cfg.model})

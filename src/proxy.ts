@@ -33,7 +33,6 @@ interface ProviderConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
-  name: string;
 }
 
 function pickEnv(...keys: string[]): string | undefined {
@@ -51,7 +50,6 @@ const PROVIDERS = {
       "https://api.deepseek.com/anthropic",
     apiKey: process.env.DEEPSEEK_API_KEY || "",
     model: pickEnv("DEEPSEEK_MODEL") || "deepseek-chat",
-    name: "deepseek",
   },
   qwen: {
     baseUrl:
@@ -59,7 +57,6 @@ const PROVIDERS = {
       "https://dashscope.aliyuncs.com/apps/anthropic",
     apiKey: process.env.QWEN_API_KEY || "",
     model: pickEnv("QWEN_MODEL") || "qwen-plus",
-    name: "qwen",
   },
   glm: {
     baseUrl:
@@ -67,7 +64,6 @@ const PROVIDERS = {
       "https://open.bigmodel.cn/api/anthropic",
     apiKey: process.env.GLM_API_KEY || "",
     model: pickEnv("GLM_MODEL") || "glm-5",
-    name: "glm",
   },
   minimax: {
     baseUrl:
@@ -75,14 +71,12 @@ const PROVIDERS = {
       "https://api.minimaxi.com/anthropic",
     apiKey: process.env.MINIMAX_API_KEY || "",
     model: pickEnv("MINIMAX_MODEL") || "MiniMax-M2.7-highspeed",
-    name: "minimax",
   },
   kimi: {
     baseUrl:
       pickEnv("KIMI_ANTHROPIC_BASE_URL") || "https://api.moonshot.cn/anthropic",
     apiKey: process.env.KIMI_API_KEY || "",
     model: pickEnv("KIMI_MODEL") || "kimi-k2.5",
-    name: "kimi",
   },
 } satisfies Record<string, ProviderConfig>;
 
@@ -108,7 +102,7 @@ if (!initialConfig.apiKey) {
   console.warn("Please set the appropriate environment variable in .env");
 }
 
-console.log(`Using ${initialConfig.name} as backend`);
+console.log(`Using ${currentProvider} as backend`);
 console.log(`Model: ${initialConfig.model}`);
 
 function getTargetModel(requestedModel: unknown): string {
@@ -356,7 +350,6 @@ export function createApp() {
     res.json({
       provider: currentProvider,
       model: config.model,
-      name: config.name,
       baseUrl: config.baseUrl,
       availableProviders: Object.keys(PROVIDERS),
     });
@@ -407,7 +400,6 @@ export function createApp() {
       success: true,
       provider: currentProvider,
       model: targetConfig.model,
-      name: targetConfig.name,
     });
   });
 
@@ -430,7 +422,7 @@ if (isMainModule()) {
 ║         claude-proxy                           ║
 ╠════════════════════════════════════════════════╣
 ║  http://localhost:${PORT}
-║  Backend: ${cfg.name} (${cfg.model})
+║  Backend: ${currentProvider} (${cfg.model})
 ╠════════════════════════════════════════════════╣
 ║  Set these env vars in your app:               ║
 ║  ANTHROPIC_BASE_URL=http://localhost:${PORT}

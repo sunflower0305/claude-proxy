@@ -265,7 +265,6 @@ describe.sequential("proxy local integration", () => {
       success: true,
       provider: "deepseek",
       model: upstreamModel,
-      name: "deepseek",
     });
   });
 
@@ -277,7 +276,6 @@ describe.sequential("proxy local integration", () => {
       success: true,
       provider: "kimi",
       model: kimiUpstreamModel,
-      name: "kimi",
     });
   });
 
@@ -300,7 +298,6 @@ describe.sequential("proxy local integration", () => {
     await expect(providerResponse.json()).resolves.toEqual({
       provider: "kimi",
       model: kimiUpstreamModel,
-      name: "kimi",
       baseUrl: `http://127.0.0.1:${harness.upstreamPort}`,
       availableProviders: ["deepseek", "qwen", "glm", "minimax", "kimi"],
     });
@@ -587,7 +584,6 @@ describe.sequential("proxy local integration", () => {
       success: true,
       provider: "kimi",
       model: kimiUpstreamModel,
-      name: "kimi",
     });
   });
 
@@ -636,7 +632,6 @@ describe.sequential("proxy local integration", () => {
     await expect(currentProviderResponse.json()).resolves.toEqual({
       provider: "deepseek",
       model: upstreamModel,
-      name: "deepseek",
       baseUrl: `http://127.0.0.1:${harness.upstreamPort}`,
       availableProviders: ["deepseek", "qwen", "glm", "minimax", "kimi"],
     });

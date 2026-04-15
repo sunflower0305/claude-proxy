@@ -63,6 +63,30 @@ curl -X POST http://localhost:8080/api/provider \
   -d '{"provider": "deepseek"}'
 ```
 
+## End-to-end CLI verification
+
+This repo also includes a real end-to-end check that starts the local proxy, switches providers with `curl`, and verifies a local `claude` CLI call through the proxy:
+
+```bash
+npm run test:provider-cli-e2e
+```
+
+The runner:
+
+- starts `src/proxy.ts` on a random local port
+- switches `deepseek`, `qwen`, `glm`, `minimax`, and `kimi` via `POST /api/provider`
+- runs `claude --bare -p "3+9=?"` against the proxy
+- passes when the normalized output contains `12`
+- uses a per-command timeout, overridable with `PROVIDER_CLI_E2E_COMMAND_TIMEOUT_MS`
+
+Prerequisites:
+
+- `curl` and `claude` must be available in `PATH`
+- the provider API keys you want to verify must be configured in `.env`
+- skipped providers are reported as `SKIP` when their API key is missing
+
+The script returns exit code `1` if any runnable provider fails, and `0` when all runnable providers pass or every provider is skipped.
+
 ## Endpoints
 
 | Method     | Path            | Description                                     |

@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * Claude Proxy
  *
@@ -12,6 +13,7 @@
 import "dotenv/config";
 import cors from "cors";
 import express from "express";
+import { realpathSync } from "node:fs";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
@@ -393,7 +395,7 @@ async function handleStreamingRequest(
   }
 }
 
-export function createApp() {
+export function createApp(): express.Express {
   const app = express();
 
   app.use(cors());
@@ -500,12 +502,19 @@ export function createApp() {
   return app;
 }
 
-export const app = createApp();
+export const app: express.Express = createApp();
 
 const PORT = parseInt(process.env.PROXY_PORT || "8080", 10);
 
 function isMainModule() {
-  return process.argv[1] === fileURLToPath(import.meta.url);
+  const entryPath = process.argv[1];
+  if (!entryPath) return false;
+
+  try {
+    return realpathSync(entryPath) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
 }
 
 if (isMainModule()) {

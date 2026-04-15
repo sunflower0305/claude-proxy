@@ -1,51 +1,77 @@
 # claude-proxy
 
-A lightweight proxy that lets you use Claude code or **Claude Agent SDK** with domestic Chinese LLMs as the backend — no Anthropic API key required.
+`claude-proxy` is published on npm as `@sunflower0305/claude-proxy`. It is a lightweight Express proxy that lets Claude Code or the Claude Agent SDK talk to domestic Chinese LLM providers through Anthropic-compatible `/v1/messages` endpoints.
 
-It accepts Claude Messages API requests and forwards them to provider-native Anthropic-compatible `/v1/messages` endpoints for DeepSeek, Qwen, GLM, MiniMax, or Kimi.
+It currently supports `qwen`, `deepseek`, `glm`, `minimax`, and `kimi`.
 
-## Why
+## Install
 
-[Claude Code and Agent SDK](https://github.com/anthropics/claude-agent-sdk) provides powerful tool-use and agent loop capabilities, but requires Anthropic API access. This proxy intercepts requests so you can use the same Claude Code and SDK with domestic models that are faster, cheaper, or more accessible in China.
-
-## Supported Providers
-
-| Provider   | API key            | Models                                   |
-| ---------- | ------------------ | ---------------------------------------- |
-| `qwen`     | `QWEN_API_KEY`     | qwen3-max or qwen-plus (faster, cheaper) |
-| `deepseek` | `DEEPSEEK_API_KEY` | deepseek-chat                            |
-| `glm`      | `GLM_API_KEY`      | glm-5                                    |
-| `minimax`  | `MINIMAX_API_KEY`  | MiniMax-M2.7-highspeed                   |
-| `kimi`     | `KIMI_API_KEY`     | kimi-k2.5                                |
-
-## Quick Start
+Run without installing:
 
 ```bash
-# 1. Clone and install
-git clone https://github.com/sunflower0305/claude-proxy
-cd claude-proxy
-npm install
-
-# 2. Configure
-cp .env.example .env
-# Edit .env: set PROVIDER and the corresponding API key
-
-# 3. Start the proxy
-npm run dev
+npx @sunflower0305/claude-proxy
 ```
 
-## Configure your app
+Or install globally:
 
-Point your Claude Code or Agent SDK at the proxy:
+```bash
+npm install -g @sunflower0305/claude-proxy
+claude-proxy
+```
+
+## Configure
+
+The proxy reads configuration from environment variables. You can export them in your shell or create a `.env` file in the directory where you run `claude-proxy`.
+
+Example `.env`:
+
+```dotenv
+PROVIDER=qwen
+PROXY_PORT=8080
+QWEN_API_KEY=your-qwen-api-key
+QWEN_MODEL=qwen-plus
+```
+
+Available variables:
+
+| Variable | Purpose |
+| --- | --- |
+| `PROVIDER` | Active provider. Defaults to `qwen`. |
+| `PROXY_PORT` | Local server port. Defaults to `8080`. |
+| `QWEN_API_KEY` | API key for Qwen. |
+| `DEEPSEEK_API_KEY` | API key for DeepSeek. |
+| `GLM_API_KEY` | API key for GLM. |
+| `MINIMAX_API_KEY` | API key for MiniMax. |
+| `KIMI_API_KEY` | API key for Kimi. |
+| `QWEN_ANTHROPIC_BASE_URL`, `DEEPSEEK_ANTHROPIC_BASE_URL`, `GLM_ANTHROPIC_BASE_URL`, `MINIMAX_ANTHROPIC_BASE_URL`, `KIMI_ANTHROPIC_BASE_URL` | Override the upstream Anthropic-compatible base URL for a provider. |
+| `QWEN_MODEL`, `DEEPSEEK_MODEL`, `GLM_MODEL`, `MINIMAX_MODEL`, `KIMI_MODEL` | Override the default upstream model for a provider. |
+
+You can use the bundled example as a starting point:
+
+```bash
+cp node_modules/@sunflower0305/claude-proxy/.env.example .env
+```
+
+If you installed globally, create `.env` manually or export the variables in your shell before starting the proxy.
+
+## Start The Proxy
+
+```bash
+claude-proxy
+```
+
+When the server starts, it listens on `http://localhost:8080` by default.
+
+Point Claude Code or the Claude Agent SDK at the proxy:
 
 ```bash
 export ANTHROPIC_BASE_URL=http://localhost:8080
 export ANTHROPIC_API_KEY=any-string-works
 ```
 
-Or in code:
+Example SDK usage:
 
-```typescript
+```ts
 import Anthropic from "@anthropic-ai/sdk";
 
 const client = new Anthropic({
@@ -54,81 +80,82 @@ const client = new Anthropic({
 });
 ```
 
-## Switch provider at runtime
+## Runtime Endpoints
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/v1/messages` | Main Anthropic Messages API proxy endpoint |
+| `GET` | `/v1/models` | Lists supported Claude-facing model ids |
+| `GET` | `/health` | Health check |
+| `GET` / `POST` | `/api/provider` | Read or switch the active provider |
+
+Health check:
 
 ```bash
-# Switch to DeepSeek
+curl http://localhost:8080/health
+```
+
+Switch provider at runtime:
+
+```bash
 curl -X POST http://localhost:8080/api/provider \
   -H "Content-Type: application/json" \
-  -d '{"provider": "deepseek"}'
+  -d '{"provider":"deepseek"}'
 ```
 
-## End-to-end CLI verification
+## Library Usage
 
-This repo also includes a real end-to-end check that starts the local proxy, switches providers with `curl`, and verifies a local `claude` CLI call through the proxy:
+The package also keeps the programmatic Express entrypoint:
+
+```ts
+import { createApp } from "@sunflower0305/claude-proxy";
+
+const app = createApp();
+app.listen(8080);
+```
+
+## Release Verification
+
+`v1.0.0` was verified on April 15, 2026 after publishing `@sunflower0305/claude-proxy` to npm.
+
+Verified items:
+
+- `npm install @sunflower0305/claude-proxy` completed successfully in a clean temporary directory
+- the published `claude-proxy` CLI started correctly from the installed package
+- `GET /health` and `GET /v1/models` returned `200 OK`
+- end-to-end proxying against a local mock Anthropic-compatible upstream passed for both non-streaming and streaming `POST /v1/messages`
+- end-to-end proxying against the real Qwen Anthropic-compatible upstream passed for both non-streaming and streaming `POST /v1/messages`
+
+Observed behavior during verification:
+
+- model remapping worked as expected, including `claude-sonnet-4-6 -> qwen-plus`
+- the real Qwen verification returned a valid assistant response for both buffered JSON and SSE streaming modes
+- the published package included the expected CLI entrypoint, `dist/` build output, `README.md`, `LICENSE`, and `.env.example`
+
+## Development
+
+From source:
 
 ```bash
-npm run test:provider-cli-e2e
+npm install
+npm run dev
 ```
 
-The runner:
-
-- starts `src/proxy.ts` on a random local port
-- switches `deepseek`, `qwen`, `glm`, `minimax`, and `kimi` via `POST /api/provider`
-- runs `claude --bare -p "3+9=?"` against the proxy
-- passes when the normalized output contains `12`
-- uses a per-command timeout, overridable with `PROVIDER_CLI_E2E_COMMAND_TIMEOUT_MS`
-- writes per-run artifacts under `.artifacts/provider-cli-e2e/<timestamp>/`
-
-Prerequisites:
-
-- `curl` and `claude` must be available in `PATH`
-- the provider API keys you want to verify must be configured in `.env`
-- skipped providers are reported as `SKIP` when their API key is missing
-- each provider gets `curl` logs, `claude` logs, and a snapshot of proxy stdout/stderr for debugging
-
-The script returns exit code `1` if any runnable provider fails, and `0` when all runnable providers pass or every provider is skipped.
-
-To turn a persisted run into a standalone HTML report:
+Build and local package verification:
 
 ```bash
-# Use the latest run under .artifacts/provider-cli-e2e/
-npm run report:provider-cli-e2e
-
-# Or point at a specific run directory
-npm run report:provider-cli-e2e -- .artifacts/provider-cli-e2e/2026-04-15T09-58-42-939Z
+npm run build
+env npm_config_cache=/tmp/claude-proxy-npm-cache npm pack --dry-run
 ```
 
-The report is written to `<run-dir>/report.html` and includes summary cards, provider-by-provider results, and expandable raw logs for `curl`, `claude`, and the proxy.
+Local integration test:
 
-## Endpoints
+```bash
+npm run test:proxy-local
+```
 
-| Method     | Path            | Description                                     |
-| ---------- | --------------- | ----------------------------------------------- |
-| `POST`     | `/v1/messages`  | Claude Messages API (streaming + non-streaming) |
-| `GET`      | `/health`       | Health check                                    |
-| `GET`      | `/v1/models`    | List available models                           |
-| `GET/POST` | `/api/provider` | Get or switch current provider                  |
-
-## Features
-
-- Anthropic tool use passthrough for Anthropic-compatible `/v1/messages` providers
-- Streaming and non-streaming responses
-- Minimal request normalization with upstream model remapping
-- Anthropic thinking and metadata fields passed through unchanged
-- Runtime provider switching
+Release notes for `v1.0.0` are available in [docs/releases/1.0.0.md](/Users/joe/ai/claude-proxy/docs/releases/1.0.0.md).
 
 ## License
 
 MIT
-
----
-
-## Contact
-
-If you have questions, ideas, or want to collaborate:
-
-|                   |                   |
-| ----------------- | ----------------- |
-| 📧 Email          | 3268007793@qq.com |
-| 📱 Phone / WeChat | 18550207121       |

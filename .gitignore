@@ -1,6 +1,7 @@
 node_modules/
 dist/
-.env
 CLAUDE.md
 AGENTS.md
+.env
 .artifacts/
+.npmrc

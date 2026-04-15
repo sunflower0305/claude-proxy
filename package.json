@@ -1,12 +1,58 @@
 {
-  "name": "claude-proxy",
+  "name": "@sunflower0305/claude-proxy",
   "version": "1.0.0",
   "type": "module",
   "description": "A proxy that lets Claude Agent SDK use domestic Chinese LLMs (DeepSeek, Qwen, GLM, MiniMax) as backend",
+  "license": "MIT",
+  "main": "./dist/proxy.js",
+  "types": "./dist/proxy.d.ts",
+  "bin": {
+    "claude-proxy": "dist/proxy.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/proxy.d.ts",
+      "import": "./dist/proxy.js"
+    }
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE",
+    ".env.example"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sunflower0305/claude-proxy.git"
+  },
+  "homepage": "https://github.com/sunflower0305/claude-proxy#readme",
+  "bugs": {
+    "url": "https://github.com/sunflower0305/claude-proxy/issues"
+  },
+  "keywords": [
+    "anthropic",
+    "claude",
+    "proxy",
+    "express",
+    "llm",
+    "qwen",
+    "deepseek",
+    "glm",
+    "minimax",
+    "kimi"
+  ],
   "scripts": {
     "dev": "tsx watch src/proxy.ts",
     "build": "tsc",
     "start": "node dist/proxy.js",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run test:proxy-local",
     "test": "vitest run",
     "test:proxy-local": "vitest run tests/integration/proxy-local.test.ts",
     "test:provider-anthropic": "node --experimental-strip-types tests/integration/provider-anthropic.ts",

@@ -377,10 +377,7 @@ export function createApp() {
       else if (normalizedModel.includes("deepseek"))
         targetProvider = "deepseek";
       else if (normalizedModel.includes("glm")) targetProvider = "glm";
-      else if (
-        normalizedModel.includes("minimax") ||
-        normalizedModel.includes("abab")
-      ) {
+      else if (normalizedModel.includes("minimax")) {
         targetProvider = "minimax";
       }
     }

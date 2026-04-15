@@ -591,6 +591,19 @@ describe.sequential("proxy local integration", () => {
     });
   });
 
+  it("rejects abab model names instead of treating them as minimax", async () => {
+    const response = await switchProviderByModel(
+      harness.proxyBaseUrl,
+      "abab6.5s-chat"
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Unknown provider: undefined",
+      available: ["deepseek", "qwen", "glm", "minimax", "kimi"],
+    });
+  });
+
   it("rejects switching to qwen-plus after consolidating DashScope providers", async () => {
     const response = await switchProvider(harness.proxyBaseUrl, "qwen-plus");
 

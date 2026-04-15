@@ -16,7 +16,6 @@ runAnthropicCompatibilitySuite(
       apiKey: process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY,
       baseUrl:
         process.env.QWEN_ANTHROPIC_BASE_URL ||
-        process.env.DASHSCOPE_ANTHROPIC_BASE_URL ||
         "https://dashscope.aliyuncs.com/apps/anthropic",
       model: process.env.QWEN_MODEL || "qwen-plus",
     },

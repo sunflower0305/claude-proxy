@@ -35,6 +35,15 @@ interface ProviderConfig {
   model: string;
 }
 
+interface RequestTrace {
+  requestId: string;
+  provider: ProviderKey;
+  requestedModel: string;
+  targetModel: string;
+  stream: boolean;
+  startedAt: number;
+}
+
 function pickEnv(...keys: string[]): string | undefined {
   for (const key of keys) {
     const value = process.env[key]?.trim();
@@ -89,6 +98,7 @@ function isProviderKey(value: string | undefined): value is ProviderKey {
 let currentProvider: ProviderKey = isProviderKey(process.env.PROVIDER)
   ? process.env.PROVIDER
   : "qwen";
+let requestSequence = 0;
 
 function getConfig(provider: ProviderKey = currentProvider): ProviderConfig {
   return PROVIDERS[provider] || PROVIDERS.qwen;
@@ -195,6 +205,47 @@ function createProxyError(message: string) {
   };
 }
 
+function createRequestTrace(
+  requestedModel: unknown,
+  targetModel: string,
+  stream: boolean
+): RequestTrace {
+  return {
+    requestId: `req-${++requestSequence}`,
+    provider: currentProvider,
+    requestedModel: String(requestedModel || getConfig().model),
+    targetModel,
+    stream,
+    startedAt: Date.now(),
+  };
+}
+
+function logTimingEvent(
+  trace: RequestTrace,
+  phase:
+    | "start"
+    | "upstream_headers"
+    | "first_chunk"
+    | "completed"
+    | "client_aborted"
+    | "error",
+  extra: Record<string, unknown> = {}
+) {
+  console.log(
+    `[ProxyTiming] ${JSON.stringify({
+      request_id: trace.requestId,
+      provider: trace.provider,
+      requested_model: trace.requestedModel,
+      target_model: trace.targetModel,
+      stream: trace.stream,
+      phase,
+      elapsed_ms: Date.now() - trace.startedAt,
+      at: new Date().toISOString(),
+      ...extra,
+    })}`
+  );
+}
+
 async function handleNonStreamingRequest(
   req: express.Request,
   res: express.Response
@@ -203,10 +254,12 @@ async function handleNonStreamingRequest(
 
   const targetModel = getTargetModel(req.body?.model);
   const requestBody = buildUpstreamBody(req.body, targetModel);
+  const trace = createRequestTrace(req.body?.model, targetModel, false);
 
   console.log(
     `\n[${new Date().toISOString()}] ${String(req.body?.model || config.model)} -> ${targetModel} (non-streaming)`
   );
+  logTimingEvent(trace, "start");
 
   try {
     const upstream = await fetch(getUpstreamUrl(config.baseUrl), {
@@ -214,12 +267,21 @@ async function handleNonStreamingRequest(
       headers: buildUpstreamHeaders(req, false, config.apiKey),
       body: JSON.stringify(requestBody),
     });
+    logTimingEvent(trace, "upstream_headers", {
+      status: upstream.status,
+      content_type: upstream.headers.get("content-type") || "",
+    });
 
     const payload = Buffer.from(await upstream.arrayBuffer());
     copyUpstreamHeaders(upstream, res);
     res.status(upstream.status).send(payload);
+    logTimingEvent(trace, "completed", {
+      status: upstream.status,
+      bytes: payload.byteLength,
+    });
   } catch (error: any) {
     console.error("Request error:", error);
+    logTimingEvent(trace, "error", { message: error?.message || String(error) });
     res.status(500).json(createProxyError(error.message));
   }
 }
@@ -232,18 +294,22 @@ async function handleStreamingRequest(
 
   const targetModel = getTargetModel(req.body?.model);
   const requestBody = buildUpstreamBody(req.body, targetModel);
+  const trace = createRequestTrace(req.body?.model, targetModel, true);
   const abortController = new AbortController();
   let clientClosed = false;
   let streamCompleted = false;
+  let sawFirstChunk = false;
 
   console.log(
     `\n[${new Date().toISOString()}] ${String(req.body?.model || config.model)} -> ${targetModel} (streaming)`
   );
+  logTimingEvent(trace, "start");
 
   res.on("close", () => {
     if (streamCompleted) return;
     clientClosed = true;
     abortController.abort();
+    logTimingEvent(trace, "client_aborted");
   });
 
   try {
@@ -253,6 +319,10 @@ async function handleStreamingRequest(
       body: JSON.stringify(requestBody),
       signal: abortController.signal,
     });
+    logTimingEvent(trace, "upstream_headers", {
+      status: upstream.status,
+      content_type: upstream.headers.get("content-type") || "",
+    });
 
     copyUpstreamHeaders(upstream, res);
     res.status(upstream.status);
@@ -260,13 +330,33 @@ async function handleStreamingRequest(
     if (!upstream.body) {
       streamCompleted = true;
       res.end();
+      logTimingEvent(trace, "completed", {
+        status: upstream.status,
+        bytes: 0,
+        no_body: true,
+      });
       return;
     }
 
     const upstreamStream = Readable.fromWeb(upstream.body as any);
+    upstreamStream.on("data", (chunk) => {
+      if (sawFirstChunk) return;
+      sawFirstChunk = true;
+      const chunkSize = Buffer.isBuffer(chunk)
+        ? chunk.byteLength
+        : Buffer.byteLength(String(chunk));
+      logTimingEvent(trace, "first_chunk", {
+        status: upstream.status,
+        chunk_bytes: chunkSize,
+      });
+    });
     upstreamStream.on("error", (error) => {
       if (clientClosed) return;
       console.error("Upstream stream error:", error);
+      logTimingEvent(trace, "error", {
+        status: upstream.status,
+        message: error?.message || String(error),
+      });
       if (!res.writableEnded) res.end();
     });
 
@@ -275,6 +365,9 @@ async function handleStreamingRequest(
     await new Promise<void>((resolve, reject) => {
       upstreamStream.on("end", () => {
         streamCompleted = true;
+        logTimingEvent(trace, "completed", {
+          status: upstream.status,
+        });
         resolve();
       });
       upstreamStream.on("error", reject);
@@ -290,6 +383,7 @@ async function handleStreamingRequest(
     }
 
     console.error("Request error:", error);
+    logTimingEvent(trace, "error", { message: error?.message || String(error) });
     if (!res.headersSent) {
       res.status(500).json(createProxyError(error.message));
       return;

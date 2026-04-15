@@ -1,4 +1,6 @@
 import "dotenv/config";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { spawn } from "node:child_process";
 import net from "node:net";
 import process from "node:process";
@@ -21,6 +23,17 @@ interface CommandResult {
   stdout: string;
   stderr: string;
   timedOut: boolean;
+  elapsedMs: number;
+}
+
+interface ProviderTiming {
+  switchWallTimeMs?: number;
+  claudeWallTimeMs?: number;
+  proxyTimeToHeadersMs?: number;
+  proxyTimeToFirstTokenMs?: number;
+  proxyTotalTimeMs?: number;
+  proxyRequestId?: string;
+  proxyTerminalPhase?: string;
 }
 
 interface ProviderRunResult {
@@ -29,11 +42,34 @@ interface ProviderRunResult {
   model: string;
   outcome: Outcome;
   details: string;
+  timing?: ProviderTiming;
+  logDir?: string;
 }
 
 interface ProxyProcess {
   port: number;
+  stdout: () => string;
+  stderr: () => string;
   stop(): Promise<void>;
+}
+
+interface ProviderArtifactPaths {
+  dir: string;
+  curlStdout: string;
+  curlStderr: string;
+  claudeStdout: string;
+  claudeStderr: string;
+  resultJson: string;
+}
+
+interface ProxyTimingEvent {
+  request_id?: string;
+  provider?: string;
+  requested_model?: string;
+  target_model?: string;
+  phase?: string;
+  elapsed_ms?: number;
+  stream?: boolean;
 }
 
 function logSection(title: string) {
@@ -60,8 +96,120 @@ function summarizeOutput(output: string): string {
   return normalized ? JSON.stringify(normalized.slice(0, 200)) : "(empty)";
 }
 
+function parseProxyTimingEvents(output: string): ProxyTimingEvent[] {
+  return output
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("[ProxyTiming] "))
+    .flatMap((line) => {
+      try {
+        return [JSON.parse(line.slice("[ProxyTiming] ".length)) as ProxyTimingEvent];
+      } catch {
+        return [];
+      }
+    });
+}
+
+function extractTiming(events: ProxyTimingEvent[]): ProviderTiming | undefined {
+  const latestStart = [...events]
+    .reverse()
+    .find((event) => event.phase === "start" && event.request_id);
+
+  if (!latestStart?.request_id) return undefined;
+
+  const relevant = events.filter(
+    (event) => event.request_id === latestStart.request_id
+  );
+
+  const findElapsed = (phase: string) =>
+    relevant.find((event) => event.phase === phase)?.elapsed_ms;
+  const terminal = [...relevant]
+    .reverse()
+    .find((event) =>
+      ["completed", "client_aborted", "error"].includes(event.phase || "")
+    );
+
+  return {
+    proxyRequestId: latestStart.request_id,
+    proxyTimeToHeadersMs: findElapsed("upstream_headers"),
+    proxyTimeToFirstTokenMs: findElapsed("first_chunk"),
+    proxyTotalTimeMs: findElapsed("completed"),
+    proxyTerminalPhase: terminal?.phase,
+  };
+}
+
 function formatMissingDependency(binary: string) {
   return `${binary} not found in PATH`;
+}
+
+function sanitizeFileSegment(value: string) {
+  return value.replace(/[^a-zA-Z0-9._-]+/g, "-");
+}
+
+function buildRunId() {
+  return new Date().toISOString().replace(/[:.]/g, "-");
+}
+
+function getArtifactRoot(cwd: string, runId: string) {
+  return path.join(cwd, ".artifacts", "provider-cli-e2e", runId);
+}
+
+function getProviderArtifactPaths(
+  artifactRoot: string,
+  provider: ProviderDefinition
+): ProviderArtifactPaths {
+  const dir = path.join(
+    artifactRoot,
+    `${provider.key}-${sanitizeFileSegment(provider.model)}`
+  );
+
+  return {
+    dir,
+    curlStdout: path.join(dir, "curl.stdout.log"),
+    curlStderr: path.join(dir, "curl.stderr.log"),
+    claudeStdout: path.join(dir, "claude.stdout.log"),
+    claudeStderr: path.join(dir, "claude.stderr.log"),
+    resultJson: path.join(dir, "result.json"),
+  };
+}
+
+async function ensureDirectory(dir: string) {
+  await mkdir(dir, { recursive: true });
+}
+
+async function writeArtifactFile(filePath: string, content: string) {
+  await writeFile(filePath, content, "utf8");
+}
+
+async function writeProviderArtifacts(
+  paths: ProviderArtifactPaths,
+  result: ProviderRunResult,
+  commandOutputs: {
+    curlStdout?: string;
+    curlStderr?: string;
+    claudeStdout?: string;
+    claudeStderr?: string;
+    proxyStdout?: string;
+    proxyStderr?: string;
+  }
+) {
+  await ensureDirectory(paths.dir);
+
+  await Promise.all([
+    writeArtifactFile(paths.curlStdout, commandOutputs.curlStdout || ""),
+    writeArtifactFile(paths.curlStderr, commandOutputs.curlStderr || ""),
+    writeArtifactFile(paths.claudeStdout, commandOutputs.claudeStdout || ""),
+    writeArtifactFile(paths.claudeStderr, commandOutputs.claudeStderr || ""),
+    writeArtifactFile(
+      path.join(paths.dir, "proxy.stdout.log"),
+      commandOutputs.proxyStdout || ""
+    ),
+    writeArtifactFile(
+      path.join(paths.dir, "proxy.stderr.log"),
+      commandOutputs.proxyStderr || ""
+    ),
+    writeArtifactFile(paths.resultJson, JSON.stringify(result, null, 2)),
+  ]);
 }
 
 function printSummary(results: ProviderRunResult[]) {
@@ -74,7 +222,9 @@ function printSummary(results: ProviderRunResult[]) {
 
   for (const result of results) {
     console.log(
-      `[${result.outcome}] ${result.name} (${result.provider}, ${result.model}) - ${result.details}`
+      `[${result.outcome}] ${result.name} (${result.provider}, ${result.model}) - ${result.details}${
+        result.logDir ? ` | logs: ${result.logDir}` : ""
+      }`
     );
   }
 
@@ -132,6 +282,7 @@ async function runCommand(
     );
 
   return new Promise((resolve, reject) => {
+    const startedAt = Date.now();
     const child = spawn(file, args, {
       cwd: options.cwd,
       env: options.env,
@@ -174,6 +325,7 @@ async function runCommand(
         stdout,
         stderr,
         timedOut,
+        elapsedMs: Date.now() - startedAt,
       });
     });
   });
@@ -241,6 +393,8 @@ async function startProxy(cwd: string): Promise<ProxyProcess> {
 
   return {
     port,
+    stdout: () => stdout,
+    stderr: () => stderr,
     async stop() {
       if (child.killed || child.exitCode !== null) return;
 
@@ -277,7 +431,7 @@ async function switchProvider(
   cwd: string,
   baseUrl: string,
   provider: ProviderDefinition
-) {
+): Promise<CommandResult> {
   const response = await runCommand(
     "curl",
     [
@@ -322,6 +476,8 @@ async function switchProvider(
   ) {
     throw new Error(`unexpected switch payload: ${response.stdout}`);
   }
+
+  return response;
 }
 
 async function askClaudeViaProxy(
@@ -346,22 +502,35 @@ async function askClaudeViaProxy(
 async function runProviderCase(
   cwd: string,
   baseUrl: string,
-  provider: ProviderDefinition
+  provider: ProviderDefinition,
+  proxy: ProxyProcess,
+  artifactRoot: string
 ): Promise<ProviderRunResult> {
+  const artifactPaths = getProviderArtifactPaths(artifactRoot, provider);
+  const proxyStdoutBefore = proxy.stdout().length;
+  const proxyStderrBefore = proxy.stderr().length;
+
   if (!provider.apiKey) {
-    return {
+    const result = {
       name: provider.name,
       provider: provider.key,
       model: provider.model,
       outcome: "SKIP",
       details: `missing API key (${provider.apiKeyEnv.join(" or ")})`,
-    };
+      logDir: artifactPaths.dir,
+    } satisfies ProviderRunResult;
+    await writeProviderArtifacts(artifactPaths, result, {
+      proxyStdout: proxy.stdout().slice(proxyStdoutBefore),
+      proxyStderr: proxy.stderr().slice(proxyStderrBefore),
+    });
+    return result;
   }
 
+  let switchResult: CommandResult | undefined;
   try {
-    await switchProvider(cwd, baseUrl, provider);
+    switchResult = await switchProvider(cwd, baseUrl, provider);
   } catch (error) {
-    return {
+    const result = {
       name: provider.name,
       provider: provider.key,
       model: provider.model,
@@ -369,14 +538,22 @@ async function runProviderCase(
       details: `provider switch failed: ${
         error instanceof Error ? error.message : String(error)
       }`,
-    };
+      logDir: artifactPaths.dir,
+    } satisfies ProviderRunResult;
+    await writeProviderArtifacts(artifactPaths, result, {
+      curlStdout: switchResult?.stdout,
+      curlStderr: switchResult?.stderr,
+      proxyStdout: proxy.stdout().slice(proxyStdoutBefore),
+      proxyStderr: proxy.stderr().slice(proxyStderrBefore),
+    });
+    return result;
   }
 
   let commandResult: CommandResult;
   try {
     commandResult = await askClaudeViaProxy(cwd, baseUrl);
   } catch (error) {
-    return {
+    const result = {
       name: provider.name,
       provider: provider.key,
       model: provider.model,
@@ -384,55 +561,129 @@ async function runProviderCase(
       details: `claude invocation failed: ${
         error instanceof Error ? error.message : String(error)
       }`,
-    };
+      logDir: artifactPaths.dir,
+    } satisfies ProviderRunResult;
+    await writeProviderArtifacts(artifactPaths, result, {
+      curlStdout: switchResult?.stdout,
+      curlStderr: switchResult?.stderr,
+      proxyStdout: proxy.stdout().slice(proxyStdoutBefore),
+      proxyStderr: proxy.stderr().slice(proxyStderrBefore),
+    });
+    return result;
   }
 
+  const proxyStdoutDelta = proxy.stdout().slice(proxyStdoutBefore);
+  const proxyStderrDelta = proxy.stderr().slice(proxyStderrBefore);
+  const timing = extractTiming(parseProxyTimingEvents(proxyStdoutDelta));
+  if (timing) {
+    timing.switchWallTimeMs = switchResult?.elapsedMs;
+    timing.claudeWallTimeMs = commandResult.elapsedMs;
+  }
+
+  let result: ProviderRunResult;
   if (commandResult.timedOut) {
-    return {
+    result = {
       name: provider.name,
       provider: provider.key,
       model: provider.model,
       outcome: "FAIL",
-      details: `claude timed out, stderr=${summarizeOutput(commandResult.stderr)}`,
+      details: `claude timed out, stdout=${summarizeOutput(
+        commandResult.stdout
+      )}, stderr=${summarizeOutput(commandResult.stderr)}`,
+      timing: timing || {
+        switchWallTimeMs: switchResult?.elapsedMs,
+        claudeWallTimeMs: commandResult.elapsedMs,
+      },
+      logDir: artifactPaths.dir,
     };
-  }
-
-  if (commandResult.exitCode !== 0) {
-    return {
+  } else if (commandResult.exitCode !== 0) {
+    result = {
       name: provider.name,
       provider: provider.key,
       model: provider.model,
       outcome: "FAIL",
-      details: `claude exited with code ${commandResult.exitCode}, stderr=${summarizeOutput(
+      details: `claude exited with code ${
+        commandResult.exitCode
+      }, stdout=${summarizeOutput(commandResult.stdout)}, stderr=${summarizeOutput(
         commandResult.stderr
       )}`,
+      timing: timing || {
+        switchWallTimeMs: switchResult?.elapsedMs,
+        claudeWallTimeMs: commandResult.elapsedMs,
+      },
+      logDir: artifactPaths.dir,
     };
+  } else {
+    const normalizedOutput = normalizeOutput(commandResult.stdout);
+    if (!normalizedOutput.includes("12")) {
+      result = {
+        name: provider.name,
+        provider: provider.key,
+        model: provider.model,
+        outcome: "FAIL",
+        details: `unexpected output ${summarizeOutput(commandResult.stdout)}`,
+        timing: timing || {
+          switchWallTimeMs: switchResult?.elapsedMs,
+          claudeWallTimeMs: commandResult.elapsedMs,
+        },
+        logDir: artifactPaths.dir,
+      };
+    } else {
+      result = {
+        name: provider.name,
+        provider: provider.key,
+        model: provider.model,
+        outcome: "PASS",
+        details: `output ${summarizeOutput(commandResult.stdout)}`,
+        timing: timing || {
+          switchWallTimeMs: switchResult?.elapsedMs,
+          claudeWallTimeMs: commandResult.elapsedMs,
+        },
+        logDir: artifactPaths.dir,
+      };
+    }
   }
 
-  const normalizedOutput = normalizeOutput(commandResult.stdout);
-  if (!normalizedOutput.includes("12")) {
-    return {
-      name: provider.name,
-      provider: provider.key,
-      model: provider.model,
-      outcome: "FAIL",
-      details: `unexpected output ${summarizeOutput(commandResult.stdout)}`,
-    };
-  }
+  await writeProviderArtifacts(artifactPaths, result, {
+    curlStdout: switchResult?.stdout,
+    curlStderr: switchResult?.stderr,
+    claudeStdout: commandResult.stdout,
+    claudeStderr: commandResult.stderr,
+    proxyStdout: proxyStdoutDelta,
+    proxyStderr: proxyStderrDelta,
+  });
 
-  return {
-    name: provider.name,
-    provider: provider.key,
-    model: provider.model,
-    outcome: "PASS",
-    details: `output ${summarizeOutput(commandResult.stdout)}`,
-  };
+  return result;
+}
+
+async function writeRunSummary(
+  artifactRoot: string,
+  results: ProviderRunResult[],
+  proxy?: ProxyProcess
+) {
+  await ensureDirectory(artifactRoot);
+  await Promise.all([
+    writeArtifactFile(
+      path.join(artifactRoot, "summary.json"),
+      JSON.stringify(results, null, 2)
+    ),
+    writeArtifactFile(
+      path.join(artifactRoot, "proxy.stdout.log"),
+      proxy?.stdout() || ""
+    ),
+    writeArtifactFile(
+      path.join(artifactRoot, "proxy.stderr.log"),
+      proxy?.stderr() || ""
+    ),
+  ]);
 }
 
 async function main() {
   const cwd = process.cwd();
   const providers = getProviderDefinitions();
   const results: ProviderRunResult[] = [];
+  const runId = buildRunId();
+  const artifactRoot = getArtifactRoot(cwd, runId);
 
   const missingBinaries: string[] = [];
   if (!(await binaryExists("curl", cwd))) {
@@ -450,9 +701,12 @@ async function main() {
         model: provider.model,
         outcome: "SKIP",
         details: missingBinaries.join("; "),
+        logDir: getProviderArtifactPaths(artifactRoot, provider).dir,
       });
     }
+    await writeRunSummary(artifactRoot, results);
     printSummary(results);
+    console.log(`Artifacts written to ${artifactRoot}`);
     return;
   }
 
@@ -460,21 +714,30 @@ async function main() {
   const proxy = await startProxy(cwd);
   const proxyBaseUrl = `http://127.0.0.1:${proxy.port}`;
   console.log(`Proxy ready at ${proxyBaseUrl}`);
+  console.log(`Artifacts will be written to ${artifactRoot}`);
 
   try {
     for (const provider of providers) {
       logSection(`Provider ${provider.name}`);
-      const result = await runProviderCase(cwd, proxyBaseUrl, provider);
+      const result = await runProviderCase(
+        cwd,
+        proxyBaseUrl,
+        provider,
+        proxy,
+        artifactRoot
+      );
       results.push(result);
       console.log(
-        `[${result.outcome}] ${result.name} (${result.provider}) - ${result.details}`
+        `[${result.outcome}] ${result.name} (${result.provider}) - ${result.details} | logs: ${result.logDir}`
       );
     }
   } finally {
+    await writeRunSummary(artifactRoot, results, proxy);
     await proxy.stop();
   }
 
   printSummary(results);
+  console.log(`Artifacts written to ${artifactRoot}`);
 
   const hasFailures = results.some((result) => result.outcome === "FAIL");
   const ranAny = results.some((result) => result.outcome !== "SKIP");

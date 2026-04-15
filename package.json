@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:proxy-local": "vitest run tests/integration/proxy-local.test.ts",
     "test:provider-anthropic": "node --experimental-strip-types tests/integration/provider-anthropic.ts",
-    "test:provider-cli-e2e": "node --experimental-strip-types tests/integration/provider-cli-e2e.ts"
+    "test:provider-cli-e2e": "node --experimental-strip-types tests/integration/provider-cli-e2e.ts",
+    "report:provider-cli-e2e": "node --experimental-strip-types tests/integration/report-provider-cli-e2e.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",

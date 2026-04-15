@@ -78,14 +78,28 @@ The runner:
 - runs `claude --bare -p "3+9=?"` against the proxy
 - passes when the normalized output contains `12`
 - uses a per-command timeout, overridable with `PROVIDER_CLI_E2E_COMMAND_TIMEOUT_MS`
+- writes per-run artifacts under `.artifacts/provider-cli-e2e/<timestamp>/`
 
 Prerequisites:
 
 - `curl` and `claude` must be available in `PATH`
 - the provider API keys you want to verify must be configured in `.env`
 - skipped providers are reported as `SKIP` when their API key is missing
+- each provider gets `curl` logs, `claude` logs, and a snapshot of proxy stdout/stderr for debugging
 
 The script returns exit code `1` if any runnable provider fails, and `0` when all runnable providers pass or every provider is skipped.
+
+To turn a persisted run into a standalone HTML report:
+
+```bash
+# Use the latest run under .artifacts/provider-cli-e2e/
+npm run report:provider-cli-e2e
+
+# Or point at a specific run directory
+npm run report:provider-cli-e2e -- .artifacts/provider-cli-e2e/2026-04-15T09-58-42-939Z
+```
+
+The report is written to `<run-dir>/report.html` and includes summary cards, provider-by-provider results, and expandable raw logs for `curl`, `claude`, and the proxy.
 
 ## Endpoints
 

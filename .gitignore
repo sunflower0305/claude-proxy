@@ -3,3 +3,4 @@ dist/
 .env
 CLAUDE.md
 AGENTS.md
+.artifacts/

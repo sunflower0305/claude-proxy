@@ -18,7 +18,7 @@ runAnthropicCompatibilitySuite(
         process.env.QWEN_ANTHROPIC_BASE_URL ||
         process.env.DASHSCOPE_ANTHROPIC_BASE_URL ||
         "https://dashscope.aliyuncs.com/apps/anthropic",
-      model: process.env.QWEN_MODEL || "qwen3.6-plus",
+      model: process.env.QWEN_MODEL || "qwen-plus",
     },
     {
       name: "GLM",
@@ -26,7 +26,7 @@ runAnthropicCompatibilitySuite(
       baseUrl:
         process.env.GLM_ANTHROPIC_BASE_URL ||
         "https://open.bigmodel.cn/api/anthropic",
-      model: process.env.GLM_MODEL || "glm-4",
+      model: process.env.GLM_MODEL || "glm-5",
     },
     {
       name: "MiniMax",

@@ -1,5 +1,5 @@
 /**
- * Claude API Proxy
+ * Claude Proxy
  *
  * Proxies Anthropic Messages API requests to provider-native
  * Anthropic-compatible endpoints without translating protocols.
@@ -54,7 +54,7 @@ const PROVIDERS = {
       "https://api.deepseek.com/anthropic",
     apiKey: process.env.DEEPSEEK_API_KEY || "",
     model: pickEnv("DEEPSEEK_ANTHROPIC_MODEL") || "deepseek-chat",
-    name: "DeepSeek",
+    name: "deepseek",
     supportsAnthropicMessages: true,
   },
 
@@ -65,25 +65,8 @@ const PROVIDERS = {
     apiKey: process.env.DASHSCOPE_API_KEY || process.env.QWEN_API_KEY || "",
     model:
       pickEnv("QWEN_ANTHROPIC_MODEL", "DASHSCOPE_ANTHROPIC_MODEL") ||
-      "qwen3.6-plus",
-    name: "Qwen / 通义千问",
-    supportsAnthropicMessages: true,
-  },
-  "qwen-plus": {
-    baseUrl:
-      pickEnv(
-        "QWEN_PLUS_ANTHROPIC_BASE_URL",
-        "QWEN_ANTHROPIC_BASE_URL",
-        "DASHSCOPE_ANTHROPIC_BASE_URL"
-      ) || "https://dashscope.aliyuncs.com/apps/anthropic",
-    apiKey: process.env.DASHSCOPE_API_KEY || process.env.QWEN_API_KEY || "",
-    model:
-      pickEnv(
-        "QWEN_PLUS_ANTHROPIC_MODEL",
-        "QWEN_ANTHROPIC_MODEL",
-        "DASHSCOPE_ANTHROPIC_MODEL"
-      ) || "qwen3-plus",
-    name: "Qwen Plus (Fast)",
+      "qwen-plus",
+    name: "qwen",
     supportsAnthropicMessages: true,
   },
   glm: {
@@ -92,7 +75,7 @@ const PROVIDERS = {
       "https://open.bigmodel.cn/api/anthropic",
     apiKey: process.env.GLM_API_KEY || "",
     model: pickEnv("GLM_ANTHROPIC_MODEL") || "glm-4",
-    name: "GLM / 智谱",
+    name: "glm",
     supportsAnthropicMessages: true,
   },
   minimax: {
@@ -101,7 +84,7 @@ const PROVIDERS = {
       "https://api.minimaxi.com/anthropic",
     apiKey: process.env.MINIMAX_API_KEY || "",
     model: pickEnv("MINIMAX_ANTHROPIC_MODEL") || "MiniMax-M2.7-highspeed",
-    name: "MiniMax",
+    name: "minimax",
     supportsAnthropicMessages: true,
   },
   kimi: {
@@ -109,7 +92,7 @@ const PROVIDERS = {
       pickEnv("KIMI_ANTHROPIC_BASE_URL") || "https://api.moonshot.cn/anthropic",
     apiKey: process.env.KIMI_API_KEY || "",
     model: pickEnv("KIMI_ANTHROPIC_MODEL") || "kimi-k2.5",
-    name: "Kimi",
+    name: "kimi",
     supportsAnthropicMessages: true,
   },
 } satisfies Record<string, ProviderConfig>;
@@ -401,9 +384,9 @@ export function createApp() {
   app.get("/v1/models", (_req, res) => {
     res.json({
       data: [
-        { id: "claude-opus-4-5-20251101", object: "model" },
-        { id: "claude-sonnet-4-20250514", object: "model" },
-        { id: "claude-3-5-sonnet-20241022", object: "model" },
+        { id: "claude-opus-4-6", object: "model" },
+        { id: "claude-sonnet-4-6", object: "model" },
+        { id: "claude-haiku-4-5", object: "model" },
       ],
     });
   });

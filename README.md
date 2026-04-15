@@ -10,14 +10,13 @@ It accepts Claude Messages API requests and forwards them to provider-native Ant
 
 ## Supported Providers
 
-| Provider    | env key             | Models                      |
-| ----------- | ------------------- | --------------------------- |
-| `qwen`      | `DASHSCOPE_API_KEY` | qwen3-max                   |
-| `qwen-plus` | `DASHSCOPE_API_KEY` | qwen-plus (faster, cheaper) |
-| `deepseek`  | `DEEPSEEK_API_KEY`  | deepseek-chat               |
-| `glm`       | `GLM_API_KEY`       | glm-5                       |
-| `minimax`   | `MINIMAX_API_KEY`   | MiniMax-M2.7-highspeed      |
-| `kimi`      | `KIMI_API_KEY`      | kimi-k2.5                   |
+| Provider   | env key             | Models                 |
+| ---------- | ------------------- | ---------------------- |
+| `qwen`     | `DASHSCOPE_API_KEY` | qwen-plus              |
+| `deepseek` | `DEEPSEEK_API_KEY`  | deepseek-chat          |
+| `glm`      | `GLM_API_KEY`       | glm-5                  |
+| `minimax`  | `MINIMAX_API_KEY`   | MiniMax-M2.7-highspeed |
+| `kimi`     | `KIMI_API_KEY`      | kimi-k2.5              |
 
 ## Quick Start
 

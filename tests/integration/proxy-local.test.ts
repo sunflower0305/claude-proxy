@@ -265,7 +265,7 @@ describe.sequential("proxy local integration", () => {
       success: true,
       provider: "deepseek",
       model: upstreamModel,
-      name: "DeepSeek",
+      name: "deepseek",
     });
   });
 
@@ -277,7 +277,7 @@ describe.sequential("proxy local integration", () => {
       success: true,
       provider: "kimi",
       model: kimiUpstreamModel,
-      name: "Kimi",
+      name: "kimi",
     });
   });
 
@@ -300,16 +300,9 @@ describe.sequential("proxy local integration", () => {
     await expect(providerResponse.json()).resolves.toEqual({
       provider: "kimi",
       model: kimiUpstreamModel,
-      name: "Kimi",
+      name: "kimi",
       baseUrl: `http://127.0.0.1:${harness.upstreamPort}`,
-      availableProviders: [
-        "deepseek",
-        "qwen",
-        "qwen-plus",
-        "glm",
-        "minimax",
-        "kimi",
-      ],
+      availableProviders: ["deepseek", "qwen", "glm", "minimax", "kimi"],
     });
   });
 
@@ -594,7 +587,17 @@ describe.sequential("proxy local integration", () => {
       success: true,
       provider: "kimi",
       model: kimiUpstreamModel,
-      name: "Kimi",
+      name: "kimi",
+    });
+  });
+
+  it("rejects switching to qwen-plus after consolidating DashScope providers", async () => {
+    const response = await switchProvider(harness.proxyBaseUrl, "qwen-plus");
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Unknown provider: qwen-plus",
+      available: ["deepseek", "qwen", "glm", "minimax", "kimi"],
     });
   });
 
@@ -609,7 +612,7 @@ describe.sequential("proxy local integration", () => {
     expect(unsupportedResponse.status).toBe(400);
     await expect(unsupportedResponse.json()).resolves.toEqual({
       error: "Unknown provider: unknown-provider",
-      available: ["deepseek", "qwen", "qwen-plus", "glm", "minimax", "kimi"],
+      available: ["deepseek", "qwen", "glm", "minimax", "kimi"],
     });
 
     const currentProviderResponse = await fetch(
@@ -620,16 +623,9 @@ describe.sequential("proxy local integration", () => {
     await expect(currentProviderResponse.json()).resolves.toEqual({
       provider: "deepseek",
       model: upstreamModel,
-      name: "DeepSeek",
+      name: "deepseek",
       baseUrl: `http://127.0.0.1:${harness.upstreamPort}`,
-      availableProviders: [
-        "deepseek",
-        "qwen",
-        "qwen-plus",
-        "glm",
-        "minimax",
-        "kimi",
-      ],
+      availableProviders: ["deepseek", "qwen", "glm", "minimax", "kimi"],
     });
   });
 

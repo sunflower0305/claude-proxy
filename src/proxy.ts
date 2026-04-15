@@ -41,7 +41,6 @@ function pickEnv(...keys: string[]): string | undefined {
     const value = process.env[key]?.trim();
     if (value) return value;
   }
-
   return undefined;
 }
 
@@ -51,18 +50,15 @@ const PROVIDERS = {
       pickEnv("DEEPSEEK_ANTHROPIC_BASE_URL") ||
       "https://api.deepseek.com/anthropic",
     apiKey: process.env.DEEPSEEK_API_KEY || "",
-    model: pickEnv("DEEPSEEK_ANTHROPIC_MODEL") || "deepseek-chat",
+    model: pickEnv("DEEPSEEK_MODEL") || "deepseek-chat",
     name: "deepseek",
   },
-
   qwen: {
     baseUrl:
-      pickEnv("QWEN_ANTHROPIC_BASE_URL", "DASHSCOPE_ANTHROPIC_BASE_URL") ||
+      pickEnv("QWEN_ANTHROPIC_BASE_URL") ||
       "https://dashscope.aliyuncs.com/apps/anthropic",
-    apiKey: process.env.DASHSCOPE_API_KEY || process.env.QWEN_API_KEY || "",
-    model:
-      pickEnv("QWEN_ANTHROPIC_MODEL", "DASHSCOPE_ANTHROPIC_MODEL") ||
-      "qwen-plus",
+    apiKey: process.env.QWEN_API_KEY || "",
+    model: pickEnv("QWEN_MODEL") || "qwen-plus",
     name: "qwen",
   },
   glm: {
@@ -70,7 +66,7 @@ const PROVIDERS = {
       pickEnv("GLM_ANTHROPIC_BASE_URL") ||
       "https://open.bigmodel.cn/api/anthropic",
     apiKey: process.env.GLM_API_KEY || "",
-    model: pickEnv("GLM_ANTHROPIC_MODEL") || "glm-4",
+    model: pickEnv("GLM_MODEL") || "glm-5",
     name: "glm",
   },
   minimax: {
@@ -78,14 +74,14 @@ const PROVIDERS = {
       pickEnv("MINIMAX_ANTHROPIC_BASE_URL") ||
       "https://api.minimaxi.com/anthropic",
     apiKey: process.env.MINIMAX_API_KEY || "",
-    model: pickEnv("MINIMAX_ANTHROPIC_MODEL") || "MiniMax-M2.7-highspeed",
+    model: pickEnv("MINIMAX_MODEL") || "MiniMax-M2.7-highspeed",
     name: "minimax",
   },
   kimi: {
     baseUrl:
       pickEnv("KIMI_ANTHROPIC_BASE_URL") || "https://api.moonshot.cn/anthropic",
     apiKey: process.env.KIMI_API_KEY || "",
-    model: pickEnv("KIMI_ANTHROPIC_MODEL") || "kimi-k2.5",
+    model: pickEnv("KIMI_MODEL") || "kimi-k2.5",
     name: "kimi",
   },
 } satisfies Record<string, ProviderConfig>;
@@ -375,10 +371,7 @@ export function createApp() {
     let targetProvider = provider;
     if (!targetProvider && model) {
       const normalizedModel = model.toLowerCase();
-      if (
-        normalizedModel.includes("kimi") ||
-        normalizedModel.includes("moonshot")
-      ) {
+      if (normalizedModel.includes("kimi")) {
         targetProvider = "kimi";
       } else if (normalizedModel.includes("qwen")) targetProvider = "qwen";
       else if (normalizedModel.includes("deepseek"))

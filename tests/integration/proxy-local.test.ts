@@ -26,10 +26,10 @@ const kimiUpstreamModel = "kimi-k2.5-native";
 const testEnvKeys = [
   "PROVIDER",
   "DEEPSEEK_API_KEY",
-  "DEEPSEEK_ANTHROPIC_MODEL",
+  "DEEPSEEK_MODEL",
   "DEEPSEEK_ANTHROPIC_BASE_URL",
   "KIMI_API_KEY",
-  "KIMI_ANTHROPIC_MODEL",
+  "KIMI_MODEL",
   "KIMI_ANTHROPIC_BASE_URL",
 ] as const;
 
@@ -193,10 +193,10 @@ async function createHarness(): Promise<TestHarness> {
 
   setEnv("PROVIDER", "deepseek");
   setEnv("DEEPSEEK_API_KEY", upstreamApiKey);
-  setEnv("DEEPSEEK_ANTHROPIC_MODEL", upstreamModel);
+  setEnv("DEEPSEEK_MODEL", upstreamModel);
   setEnv("DEEPSEEK_ANTHROPIC_BASE_URL", `http://127.0.0.1:${upstreamPort}`);
   setEnv("KIMI_API_KEY", upstreamApiKey);
-  setEnv("KIMI_ANTHROPIC_MODEL", kimiUpstreamModel);
+  setEnv("KIMI_MODEL", kimiUpstreamModel);
   setEnv("KIMI_ANTHROPIC_BASE_URL", `http://127.0.0.1:${upstreamPort}`);
 
   vi.resetModules();

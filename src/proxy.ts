@@ -34,8 +34,6 @@ interface ProviderConfig {
   apiKey: string;
   model: string;
   name: string;
-  supportsAnthropicMessages: boolean;
-  anthropicMessagesError?: string;
 }
 
 function pickEnv(...keys: string[]): string | undefined {
@@ -55,7 +53,6 @@ const PROVIDERS = {
     apiKey: process.env.DEEPSEEK_API_KEY || "",
     model: pickEnv("DEEPSEEK_ANTHROPIC_MODEL") || "deepseek-chat",
     name: "deepseek",
-    supportsAnthropicMessages: true,
   },
 
   qwen: {
@@ -67,7 +64,6 @@ const PROVIDERS = {
       pickEnv("QWEN_ANTHROPIC_MODEL", "DASHSCOPE_ANTHROPIC_MODEL") ||
       "qwen-plus",
     name: "qwen",
-    supportsAnthropicMessages: true,
   },
   glm: {
     baseUrl:
@@ -76,7 +72,6 @@ const PROVIDERS = {
     apiKey: process.env.GLM_API_KEY || "",
     model: pickEnv("GLM_ANTHROPIC_MODEL") || "glm-4",
     name: "glm",
-    supportsAnthropicMessages: true,
   },
   minimax: {
     baseUrl:
@@ -85,7 +80,6 @@ const PROVIDERS = {
     apiKey: process.env.MINIMAX_API_KEY || "",
     model: pickEnv("MINIMAX_ANTHROPIC_MODEL") || "MiniMax-M2.7-highspeed",
     name: "minimax",
-    supportsAnthropicMessages: true,
   },
   kimi: {
     baseUrl:
@@ -93,7 +87,6 @@ const PROVIDERS = {
     apiKey: process.env.KIMI_API_KEY || "",
     model: pickEnv("KIMI_ANTHROPIC_MODEL") || "kimi-k2.5",
     name: "kimi",
-    supportsAnthropicMessages: true,
   },
 } satisfies Record<string, ProviderConfig>;
 
@@ -117,11 +110,6 @@ if (!initialConfig.apiKey) {
     `Warning: API key not configured for provider: ${currentProvider}`
   );
   console.warn("Please set the appropriate environment variable in .env");
-}
-if (!initialConfig.supportsAnthropicMessages) {
-  console.warn(
-    `Warning: ${initialConfig.anthropicMessagesError || `${initialConfig.name} does not support Anthropic /v1/messages`}`
-  );
 }
 
 console.log(`Using ${initialConfig.name} as backend`);
@@ -217,34 +205,11 @@ function createProxyError(message: string) {
   };
 }
 
-function getAnthropicUnsupportedError(config: ProviderConfig) {
-  return {
-    type: "error",
-    error: {
-      type: "invalid_request_error",
-      message:
-        config.anthropicMessagesError ||
-        `${config.name} does not support Anthropic /v1/messages`,
-    },
-  };
-}
-
-function ensureAnthropicMessagesSupported(
-  res: express.Response,
-  provider: ProviderConfig
-): boolean {
-  if (provider.supportsAnthropicMessages) return true;
-
-  res.status(400).json(getAnthropicUnsupportedError(provider));
-  return false;
-}
-
 async function handleNonStreamingRequest(
   req: express.Request,
   res: express.Response
 ) {
   const config = getConfig();
-  if (!ensureAnthropicMessagesSupported(res, config)) return;
 
   const targetModel = getTargetModel(req.body?.model);
   const requestBody = buildUpstreamBody(req.body, targetModel);
@@ -274,7 +239,6 @@ async function handleStreamingRequest(
   res: express.Response
 ) {
   const config = getConfig();
-  if (!ensureAnthropicMessagesSupported(res, config)) return;
 
   const targetModel = getTargetModel(req.body?.model);
   const requestBody = buildUpstreamBody(req.body, targetModel);
@@ -437,15 +401,6 @@ export function createApp() {
     }
 
     const targetConfig = getConfig(targetProvider);
-
-    if (!targetConfig.supportsAnthropicMessages) {
-      res.status(400).json({
-        error:
-          targetConfig.anthropicMessagesError ||
-          `Provider ${targetProvider} does not support Anthropic /v1/messages`,
-      });
-      return;
-    }
 
     if (!targetConfig.apiKey) {
       res.status(400).json({

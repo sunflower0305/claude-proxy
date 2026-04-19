@@ -141,6 +141,16 @@ npm install
 npm run dev
 ```
 
+## CI And Releases
+
+GitHub Actions currently provides a CI baseline only:
+
+- install dependencies with `pnpm`
+- run `npm run build`
+- run `npm run test:proxy-local`
+
+Publishing to npm remains a manual step. The package still relies on `prepack` and `prepublishOnly` in `package.json` to build and verify the artifact before release.
+
 Build and local package verification:
 
 ```bash

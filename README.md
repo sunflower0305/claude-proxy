@@ -1,5 +1,7 @@
 # claude-proxy
 
+[![CI](https://github.com/sunflower0305/claude-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/sunflower0305/claude-proxy/actions/workflows/ci.yml)
+
 `claude-proxy` is published on npm as `@sunflower0305/claude-proxy`. It is a lightweight Express proxy that lets Claude Code or the Claude Agent SDK talk to domestic Chinese LLM providers through Anthropic-compatible `/v1/messages` endpoints.
 
 It currently supports `qwen`, `deepseek`, `glm`, `minimax`, and `kimi`.

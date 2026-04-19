@@ -248,13 +248,17 @@ async function switchProviderByModel(baseUrl: string, model: string) {
 
 describe.sequential("proxy local integration", () => {
   let harness: TestHarness;
+  let cleanupHarness: TestHarness | undefined;
 
   beforeEach(async () => {
     harness = await createHarness();
+    cleanupHarness = harness;
   });
 
   afterEach(async () => {
-    await harness.close();
+    if (!cleanupHarness) return;
+    await cleanupHarness.close();
+    cleanupHarness = undefined;
   });
 
   it("switches provider to deepseek successfully", async () => {

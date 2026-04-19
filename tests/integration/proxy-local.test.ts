@@ -22,16 +22,31 @@ interface TestHarness {
 
 const upstreamApiKey = "provider-secret";
 const upstreamModel = "deepseek-chat-native";
+const qwenUpstreamModel = "qwen-plus-native";
+const glmUpstreamModel = "glm-5-native";
 const kimiUpstreamModel = "kimi-k2.5-native";
+const minimaxUpstreamModel = "minimax-m2-native";
 const testEnvKeys = [
   "PROVIDER",
   "DEEPSEEK_API_KEY",
   "DEEPSEEK_MODEL",
   "DEEPSEEK_ANTHROPIC_BASE_URL",
+  "QWEN_API_KEY",
+  "QWEN_MODEL",
+  "QWEN_ANTHROPIC_BASE_URL",
+  "GLM_API_KEY",
+  "GLM_MODEL",
+  "GLM_ANTHROPIC_BASE_URL",
+  "MINIMAX_API_KEY",
+  "MINIMAX_MODEL",
+  "MINIMAX_ANTHROPIC_BASE_URL",
   "KIMI_API_KEY",
   "KIMI_MODEL",
   "KIMI_ANTHROPIC_BASE_URL",
 ] as const;
+
+type TestEnvKey = (typeof testEnvKeys)[number];
+type EnvOverrides = Partial<Record<TestEnvKey, string | undefined>>;
 
 function createSsePayload() {
   return [
@@ -134,7 +149,7 @@ function setEnv(key: string, value: string | undefined) {
   process.env[key] = value;
 }
 
-async function createHarness(): Promise<TestHarness> {
+async function createHarness(envOverrides: EnvOverrides = {}): Promise<TestHarness> {
   const recordedRequests: RecordedRequest[] = [];
   const ssePayload = createSsePayload();
   const upstream = http.createServer(async (req, res) => {
@@ -189,15 +204,31 @@ async function createHarness(): Promise<TestHarness> {
 
   const envBackup = Object.fromEntries(
     testEnvKeys.map((key) => [key, process.env[key]])
-  ) as Record<(typeof testEnvKeys)[number], string | undefined>;
+  ) as Record<TestEnvKey, string | undefined>;
 
-  setEnv("PROVIDER", "deepseek");
-  setEnv("DEEPSEEK_API_KEY", upstreamApiKey);
-  setEnv("DEEPSEEK_MODEL", upstreamModel);
-  setEnv("DEEPSEEK_ANTHROPIC_BASE_URL", `http://127.0.0.1:${upstreamPort}`);
-  setEnv("KIMI_API_KEY", upstreamApiKey);
-  setEnv("KIMI_MODEL", kimiUpstreamModel);
-  setEnv("KIMI_ANTHROPIC_BASE_URL", `http://127.0.0.1:${upstreamPort}`);
+  const envValues: Record<TestEnvKey, string | undefined> = {
+    PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: upstreamApiKey,
+    DEEPSEEK_MODEL: upstreamModel,
+    DEEPSEEK_ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+    QWEN_API_KEY: upstreamApiKey,
+    QWEN_MODEL: qwenUpstreamModel,
+    QWEN_ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+    GLM_API_KEY: upstreamApiKey,
+    GLM_MODEL: glmUpstreamModel,
+    GLM_ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+    MINIMAX_API_KEY: upstreamApiKey,
+    MINIMAX_MODEL: minimaxUpstreamModel,
+    MINIMAX_ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+    KIMI_API_KEY: upstreamApiKey,
+    KIMI_MODEL: kimiUpstreamModel,
+    KIMI_ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+    ...envOverrides,
+  };
+
+  for (const key of testEnvKeys) {
+    setEnv(key, envValues[key]);
+  }
 
   vi.resetModules();
   const { createApp } = await import("../../src/proxy.ts");
@@ -283,6 +314,64 @@ describe.sequential("proxy local integration", () => {
     });
   });
 
+  it("switches provider to qwen successfully", async () => {
+    const response = await switchProvider(harness.proxyBaseUrl, "qwen");
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      provider: "qwen",
+      model: qwenUpstreamModel,
+    });
+  });
+
+  it("switches provider to glm successfully", async () => {
+    const response = await switchProvider(harness.proxyBaseUrl, "glm");
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      provider: "glm",
+      model: glmUpstreamModel,
+    });
+  });
+
+  it("switches provider to minimax successfully", async () => {
+    const response = await switchProvider(harness.proxyBaseUrl, "minimax");
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      provider: "minimax",
+      model: minimaxUpstreamModel,
+    });
+  });
+
+  it("rejects switching providers when the target API key is missing", async () => {
+    await cleanupHarness?.close();
+    harness = await createHarness({ KIMI_API_KEY: undefined });
+    cleanupHarness = harness;
+
+    const response = await switchProvider(harness.proxyBaseUrl, "kimi");
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "API key not set for: kimi",
+    });
+
+    const currentProviderResponse = await fetch(
+      `${harness.proxyBaseUrl}/api/provider`
+    );
+
+    expect(currentProviderResponse.status).toBe(200);
+    await expect(currentProviderResponse.json()).resolves.toEqual({
+      provider: "deepseek",
+      model: upstreamModel,
+      baseUrl: `http://127.0.0.1:${harness.upstreamPort}`,
+      availableProviders: ["deepseek", "qwen", "glm", "minimax", "kimi"],
+    });
+  });
+
   it("reports kimi on health and provider endpoints after switching", async () => {
     await switchProvider(harness.proxyBaseUrl, "kimi");
 
@@ -304,6 +393,19 @@ describe.sequential("proxy local integration", () => {
       model: kimiUpstreamModel,
       baseUrl: `http://127.0.0.1:${harness.upstreamPort}`,
       availableProviders: ["deepseek", "qwen", "glm", "minimax", "kimi"],
+    });
+  });
+
+  it("lists supported Claude-facing model ids", async () => {
+    const response = await fetch(`${harness.proxyBaseUrl}/v1/models`);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      data: [
+        { id: "claude-opus-4-6", object: "model" },
+        { id: "claude-sonnet-4-6", object: "model" },
+        { id: "claude-haiku-4-5", object: "model" },
+      ],
     });
   });
 
@@ -499,6 +601,35 @@ describe.sequential("proxy local integration", () => {
     await expect(response.text()).resolves.toBe(harness.ssePayload);
   });
 
+  it("returns a proxy error when the streaming upstream is unreachable", async () => {
+    await cleanupHarness?.close();
+    harness = await createHarness({
+      DEEPSEEK_ANTHROPIC_BASE_URL: "http://127.0.0.1:1",
+    });
+    cleanupHarness = harness;
+
+    const response = await fetch(`${harness.proxyBaseUrl}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": "client-placeholder",
+      },
+      body: JSON.stringify({
+        ...harness.requestPayload,
+        stream: true,
+        metadata: { case: "stream", trace_id: "stream-upstream-error" },
+      }),
+    });
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      type: "error",
+      error: {
+        type: "internal_error",
+      },
+    });
+  });
+
   it("passes through non-stream anthropic request for kimi", async () => {
     await switchProvider(harness.proxyBaseUrl, "kimi");
 
@@ -547,6 +678,84 @@ describe.sequential("proxy local integration", () => {
     });
   });
 
+  it("passes through non-stream anthropic request for qwen", async () => {
+    await switchProvider(harness.proxyBaseUrl, "qwen");
+
+    const response = await fetch(`${harness.proxyBaseUrl}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": "client-placeholder",
+      },
+      body: JSON.stringify({
+        ...harness.requestPayload,
+        metadata: { case: "success", trace_id: "qwen-non-stream" },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      model: qwenUpstreamModel,
+      metadata_echo: { case: "success", trace_id: "qwen-non-stream" },
+    });
+
+    const forwardedRequest = harness.recordedRequests.at(-1);
+    expect(forwardedRequest?.headers["x-api-key"]).toBe(upstreamApiKey);
+    expect(forwardedRequest?.body.model).toBe(qwenUpstreamModel);
+  });
+
+  it("passes through non-stream anthropic request for glm", async () => {
+    await switchProvider(harness.proxyBaseUrl, "glm");
+
+    const response = await fetch(`${harness.proxyBaseUrl}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": "client-placeholder",
+      },
+      body: JSON.stringify({
+        ...harness.requestPayload,
+        metadata: { case: "success", trace_id: "glm-non-stream" },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      model: glmUpstreamModel,
+      metadata_echo: { case: "success", trace_id: "glm-non-stream" },
+    });
+
+    const forwardedRequest = harness.recordedRequests.at(-1);
+    expect(forwardedRequest?.headers["x-api-key"]).toBe(upstreamApiKey);
+    expect(forwardedRequest?.body.model).toBe(glmUpstreamModel);
+  });
+
+  it("passes through non-stream anthropic request for minimax", async () => {
+    await switchProvider(harness.proxyBaseUrl, "minimax");
+
+    const response = await fetch(`${harness.proxyBaseUrl}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": "client-placeholder",
+      },
+      body: JSON.stringify({
+        ...harness.requestPayload,
+        metadata: { case: "success", trace_id: "minimax-non-stream" },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      model: minimaxUpstreamModel,
+      metadata_echo: { case: "success", trace_id: "minimax-non-stream" },
+    });
+
+    const forwardedRequest = harness.recordedRequests.at(-1);
+    expect(forwardedRequest?.headers["x-api-key"]).toBe(upstreamApiKey);
+    expect(forwardedRequest?.body.model).toBe(minimaxUpstreamModel);
+  });
+
   it("passes through upstream sse stream unchanged for kimi", async () => {
     await switchProvider(harness.proxyBaseUrl, "kimi");
 
@@ -588,6 +797,20 @@ describe.sequential("proxy local integration", () => {
       success: true,
       provider: "kimi",
       model: kimiUpstreamModel,
+    });
+  });
+
+  it("infers provider from minimax model name", async () => {
+    const response = await switchProviderByModel(
+      harness.proxyBaseUrl,
+      "minimax-m2"
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      provider: "minimax",
+      model: minimaxUpstreamModel,
     });
   });
 

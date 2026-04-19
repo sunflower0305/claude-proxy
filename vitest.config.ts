@@ -7,5 +7,10 @@ export default defineConfig({
     passWithNoTests: false,
     testTimeout: 15000,
     fileParallelism: false,
+    coverage: {
+      provider: "v8",
+      reportsDirectory: "./coverage",
+      reporter: ["text", "lcov"],
+    },
   },
 });

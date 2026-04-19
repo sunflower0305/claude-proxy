@@ -35,3 +35,14 @@ jobs:
 
       - name: Run local integration tests
         run: npm run test:proxy-local
+
+      - name: Generate coverage report
+        run: npm run test:coverage
+
+      - name: Upload coverage to Coveralls
+        uses: coverallsapp/github-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          file: coverage/lcov.info
+          format: lcov
+          fail-on-error: false

@@ -54,6 +54,7 @@
     "prepack": "npm run build",
     "prepublishOnly": "npm run test:proxy-local",
     "test": "vitest run",
+    "test:coverage": "vitest run tests/integration/proxy-local.test.ts --coverage --coverage.reporter=lcov --coverage.reporter=text --pool threads",
     "test:proxy-local": "vitest run tests/integration/proxy-local.test.ts",
     "test:provider-anthropic": "node --experimental-strip-types tests/integration/provider-anthropic.ts",
     "test:provider-cli-e2e": "node --experimental-strip-types tests/integration/provider-cli-e2e.ts",
@@ -65,6 +66,7 @@
     "express": "^4.21.0"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^3.2.4",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^22.0.0",

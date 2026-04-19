@@ -1,6 +1,9 @@
 # claude-proxy
 
 [![CI](https://github.com/sunflower0305/claude-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/sunflower0305/claude-proxy/actions/workflows/ci.yml)
+[![Coverage Status](https://coveralls.io/repos/github/sunflower0305/claude-proxy/badge.svg?branch=master)](https://coveralls.io/github/sunflower0305/claude-proxy?branch=master)
+[![npm version](https://img.shields.io/npm/v/%40sunflower0305%2Fclaude-proxy)](https://www.npmjs.com/package/@sunflower0305/claude-proxy)
+[![License](https://img.shields.io/github/license/sunflower0305/claude-proxy)](https://github.com/sunflower0305/claude-proxy/blob/master/LICENSE)
 
 `claude-proxy` is published on npm as `@sunflower0305/claude-proxy`. It is a lightweight Express proxy that lets Claude Code or the Claude Agent SDK talk to domestic Chinese LLM providers through Anthropic-compatible `/v1/messages` endpoints.
 
@@ -150,6 +153,8 @@ GitHub Actions currently provides a CI baseline only:
 - install dependencies with `pnpm`
 - run `npm run build`
 - run `npm run test:proxy-local`
+- run `npm run test:coverage`
+- upload `coverage/lcov.info` to Coveralls without blocking the workflow if the upload service is temporarily unavailable
 
 Publishing to npm remains a manual step. The package still relies on `prepack` and `prepublishOnly` in `package.json` to build and verify the artifact before release.
 

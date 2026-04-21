@@ -526,16 +526,16 @@ if (isMainModule()) {
 
   app.listen(PORT, () => {
     console.log(`
-╔════════════════════════════════════════════════╗
-║         claude-proxy                           ║
-╠════════════════════════════════════════════════╣
-║  http://localhost:${PORT}
-║  Backend: ${initialProvider} (${initialConfig.model})
-╠════════════════════════════════════════════════╣
-║  Set these env vars in your app:               ║
-║  ANTHROPIC_BASE_URL=http://localhost:${PORT}
-║  ANTHROPIC_API_KEY=any-string-works            ║
-╚════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════════╗
+║                     claude-proxy                      ║
+╠═══════════════════════════════════════════════════════╣
+║  http://localhost:${PORT}                             ║
+║  Backend: ${initialProvider} (${initialConfig.model}) ║
+╠═══════════════════════════════════════════════════════╣
+║  Set these env vars in your app:                      ║
+║  ANTHROPIC_BASE_URL=http://localhost:${PORT}          ║
+║  ANTHROPIC_API_KEY=any-string-works                   ║
+╚═══════════════════════════════════════════════════════╝
   `);
   });
 }

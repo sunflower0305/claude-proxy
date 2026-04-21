@@ -175,11 +175,9 @@ function inferProviderFromModel(
   if (!model) return undefined;
 
   const normalizedModel = model.toLowerCase();
-  if (normalizedModel.includes("kimi")) return "kimi";
-  if (normalizedModel.includes("qwen")) return "qwen";
-  if (normalizedModel.includes("deepseek")) return "deepseek";
-  if (normalizedModel.includes("glm")) return "glm";
-  if (normalizedModel.includes("minimax")) return "minimax";
+  for (const key of Object.keys(PROVIDERS) as ProviderKey[]) {
+    if (normalizedModel.includes(key)) return key;
+  }
   return undefined;
 }
 

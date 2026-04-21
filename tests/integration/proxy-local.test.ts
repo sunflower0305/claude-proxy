@@ -797,8 +797,10 @@ describe.sequential("proxy local integration", () => {
 
     try {
       const { createApp } = await import("../../src/proxy.ts");
-      const first = await startProxyServer(createApp);
-      const second = await startProxyServer(createApp);
+      const [first, second] = await Promise.all([
+        startProxyServer(createApp),
+        startProxyServer(createApp),
+      ]);
 
       try {
         const switchResponse = await switchProvider(first.proxyBaseUrl, "kimi");

@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] - 2026-04-21
+
+Patch release of `@sunflower0305/claude-proxy`.
+
+### Added
+
+- GitHub Actions CD workflow for tag-driven npm publishing and GitHub Release creation
+
+### Changed
+
+- release documentation and README publishing guidance now reflect the new CD workflow
+
+### Fixed
+
+- Claude-facing model mappings now expose `claude-opus-4-7` instead of `claude-opus-4-6`
+- local integration tests now validate the updated Claude model identifier
+
+Detailed release notes: [docs/releases/1.1.1.md](/Users/joe/ai/claude-proxy/docs/releases/1.1.1.md)
+
 ## [1.1.0] - 2026-04-21
 
 Second public npm release of `@sunflower0305/claude-proxy`.

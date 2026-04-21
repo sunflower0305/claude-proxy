@@ -84,6 +84,7 @@ const testEnvKeys = [
 type ProviderCase = (typeof providerCases)[number];
 type TestEnvKey = (typeof testEnvKeys)[number];
 type EnvOverrides = Partial<Record<TestEnvKey, string | undefined>>;
+type CreateApp = () => { listen(port: number, hostname: string): Server };
 
 function createSsePayload() {
   return [
@@ -159,6 +160,21 @@ function closeServer(server: Server) {
       resolve();
     });
   });
+}
+
+async function startProxyServer(createApp: CreateApp) {
+  const proxy = createApp().listen(0, "127.0.0.1");
+  await once(proxy, "listening");
+
+  const proxyAddress = proxy.address();
+  if (!proxyAddress || typeof proxyAddress === "string") {
+    throw new Error("Failed to determine proxy port");
+  }
+
+  return {
+    proxy,
+    proxyBaseUrl: `http://127.0.0.1:${proxyAddress.port}`,
+  };
 }
 
 function writeJson(
@@ -322,16 +338,10 @@ async function createHarness(envOverrides: EnvOverrides = {}): Promise<TestHarne
 
   vi.resetModules();
   const { createApp } = await import("../../src/proxy.ts");
-  const proxy = createApp().listen(0, "127.0.0.1");
-  await once(proxy, "listening");
-
-  const proxyAddress = proxy.address();
-  if (!proxyAddress || typeof proxyAddress === "string") {
-    throw new Error("Failed to determine proxy port");
-  }
+  const { proxy, proxyBaseUrl } = await startProxyServer(createApp);
 
   return {
-    proxyBaseUrl: `http://127.0.0.1:${proxyAddress.port}`,
+    proxyBaseUrl,
     upstreamPort,
     recordedRequests,
     requestPayload: buildRequestPayload(),
@@ -727,5 +737,112 @@ describe.sequential("proxy local integration", () => {
         message: "upstream rejected request",
       },
     });
+  });
+
+  it("keeps provider state isolated across apps created from the same module import", async () => {
+    await cleanupHarness?.close();
+    cleanupHarness = undefined;
+
+    const upstream = http.createServer(async (req, res) => {
+      if (req.method !== "POST" || req.url !== "/v1/messages") {
+        writeJson(res, 404, {
+          type: "error",
+          error: { type: "not_found_error", message: "missing" },
+        });
+        return;
+      }
+
+      const body = await readJsonBody(req);
+      writeJson(res, 200, {
+        id: "msg_upstream",
+        type: "message",
+        role: "assistant",
+        model: body.model,
+        content: [{ type: "text", text: "OK" }],
+        stop_reason: "end_turn",
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 1 },
+      });
+    });
+    const upstreamPort = await startServer(upstream);
+
+    const envBackup = Object.fromEntries(
+      testEnvKeys.map((key) => [key, process.env[key]])
+    ) as Record<TestEnvKey, string | undefined>;
+
+    const envValues: Record<TestEnvKey, string | undefined> = {
+      PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: upstreamApiKey,
+      DEEPSEEK_MODEL: upstreamModel,
+      DEEPSEEK_ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      QWEN_API_KEY: upstreamApiKey,
+      QWEN_MODEL: qwenUpstreamModel,
+      QWEN_ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      GLM_API_KEY: upstreamApiKey,
+      GLM_MODEL: glmUpstreamModel,
+      GLM_ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      MINIMAX_API_KEY: upstreamApiKey,
+      MINIMAX_MODEL: minimaxUpstreamModel,
+      MINIMAX_ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      KIMI_API_KEY: upstreamApiKey,
+      KIMI_MODEL: kimiUpstreamModel,
+      KIMI_ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+    };
+
+    for (const key of testEnvKeys) {
+      setEnv(key, envValues[key]);
+    }
+
+    vi.resetModules();
+
+    try {
+      const { createApp } = await import("../../src/proxy.ts");
+      const first = await startProxyServer(createApp);
+      const second = await startProxyServer(createApp);
+
+      try {
+        const switchResponse = await switchProvider(first.proxyBaseUrl, "kimi");
+        expect(switchResponse.status).toBe(200);
+
+        const [firstProviderResponse, secondProviderResponse, secondHealthResponse] =
+          await Promise.all([
+            fetch(`${first.proxyBaseUrl}/api/provider`),
+            fetch(`${second.proxyBaseUrl}/api/provider`),
+            fetch(`${second.proxyBaseUrl}/health`),
+          ]);
+
+        expect(firstProviderResponse.status).toBe(200);
+        expectProviderState(
+          await firstProviderResponse.json(),
+          "kimi",
+          kimiUpstreamModel,
+          upstreamPort
+        );
+
+        expect(secondProviderResponse.status).toBe(200);
+        expectProviderState(
+          await secondProviderResponse.json(),
+          "deepseek",
+          upstreamModel,
+          upstreamPort
+        );
+
+        expect(secondHealthResponse.status).toBe(200);
+        await expect(secondHealthResponse.json()).resolves.toEqual({
+          status: "ok",
+          provider: "deepseek",
+          model: upstreamModel,
+        });
+      } finally {
+        await closeServer(first.proxy);
+        await closeServer(second.proxy);
+      }
+    } finally {
+      await closeServer(upstream);
+      for (const key of testEnvKeys) {
+        setEnv(key, envBackup[key]);
+      }
+      vi.resetModules();
+    }
   });
 });

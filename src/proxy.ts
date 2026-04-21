@@ -74,7 +74,7 @@ const PROVIDERS = {
       pickEnv("GLM_ANTHROPIC_BASE_URL") ||
       "https://open.bigmodel.cn/api/anthropic",
     apiKey: process.env.GLM_API_KEY || "",
-    model: pickEnv("GLM_MODEL") || "glm-5",
+    model: pickEnv("GLM_MODEL") || "glm-5.1",
   },
   minimax: {
     baseUrl:
@@ -87,7 +87,7 @@ const PROVIDERS = {
     baseUrl:
       pickEnv("KIMI_ANTHROPIC_BASE_URL") || "https://api.moonshot.cn/anthropic",
     apiKey: process.env.KIMI_API_KEY || "",
-    model: pickEnv("KIMI_MODEL") || "kimi-k2.5",
+    model: pickEnv("KIMI_MODEL") || "kimi-k2.6",
   },
 } satisfies Record<string, ProviderConfig>;
 
@@ -97,50 +97,12 @@ function isProviderKey(value: string | undefined): value is ProviderKey {
   return Boolean(value && value in PROVIDERS);
 }
 
-let currentProvider: ProviderKey = isProviderKey(process.env.PROVIDER)
-  ? process.env.PROVIDER
-  : "qwen";
-let requestSequence = 0;
+function getInitialProvider(): ProviderKey {
+  return isProviderKey(process.env.PROVIDER) ? process.env.PROVIDER : "qwen";
+}
 
-function getConfig(provider: ProviderKey = currentProvider): ProviderConfig {
+function getProviderConfig(provider: ProviderKey): ProviderConfig {
   return PROVIDERS[provider] || PROVIDERS.qwen;
-}
-
-const initialConfig = getConfig();
-if (!initialConfig.apiKey) {
-  console.warn(
-    `Warning: API key not configured for provider: ${currentProvider}`
-  );
-  console.warn("Please set the appropriate environment variable in .env");
-}
-
-console.log(`Using ${currentProvider} as backend`);
-console.log(`Model: ${initialConfig.model}`);
-
-function getTargetModel(requestedModel: unknown): string {
-  if (typeof requestedModel !== "string" || !requestedModel) {
-    return getConfig().model;
-  }
-
-  const normalizedModel = requestedModel.toLowerCase();
-  if (
-    normalizedModel === "opus" ||
-    normalizedModel === "sonnet" ||
-    normalizedModel === "haiku"
-  ) {
-    return getConfig().model;
-  }
-
-  if (
-    normalizedModel.startsWith("claude-") &&
-    (normalizedModel.includes("-opus") ||
-      normalizedModel.includes("-sonnet") ||
-      normalizedModel.includes("-haiku"))
-  ) {
-    return getConfig().model;
-  }
-
-  return requestedModel;
 }
 
 function getHeaderValue(
@@ -207,19 +169,18 @@ function createProxyError(message: string) {
   };
 }
 
-function createRequestTrace(
-  requestedModel: unknown,
-  targetModel: string,
-  stream: boolean
-): RequestTrace {
-  return {
-    requestId: `req-${++requestSequence}`,
-    provider: currentProvider,
-    requestedModel: String(requestedModel || getConfig().model),
-    targetModel,
-    stream,
-    startedAt: Date.now(),
-  };
+function inferProviderFromModel(
+  model: string | undefined
+): ProviderKey | undefined {
+  if (!model) return undefined;
+
+  const normalizedModel = model.toLowerCase();
+  if (normalizedModel.includes("kimi")) return "kimi";
+  if (normalizedModel.includes("qwen")) return "qwen";
+  if (normalizedModel.includes("deepseek")) return "deepseek";
+  if (normalizedModel.includes("glm")) return "glm";
+  if (normalizedModel.includes("minimax")) return "minimax";
+  return undefined;
 }
 
 function logTimingEvent(
@@ -248,154 +209,204 @@ function logTimingEvent(
   );
 }
 
-async function handleNonStreamingRequest(
-  req: express.Request,
-  res: express.Response
-) {
-  const config = getConfig();
+export function createApp(): express.Express {
+  let currentProvider = getInitialProvider();
+  let requestSequence = 0;
 
-  const targetModel = getTargetModel(req.body?.model);
-  const requestBody = buildUpstreamBody(req.body, targetModel);
-  const trace = createRequestTrace(req.body?.model, targetModel, false);
-
-  console.log(
-    `\n[${new Date().toISOString()}] ${String(req.body?.model || config.model)} -> ${targetModel} (non-streaming)`
-  );
-  logTimingEvent(trace, "start");
-
-  try {
-    const upstream = await fetch(getUpstreamUrl(config.baseUrl), {
-      method: "POST",
-      headers: buildUpstreamHeaders(req, false, config.apiKey),
-      body: JSON.stringify(requestBody),
-    });
-    logTimingEvent(trace, "upstream_headers", {
-      status: upstream.status,
-      content_type: upstream.headers.get("content-type") || "",
-    });
-
-    const payload = Buffer.from(await upstream.arrayBuffer());
-    copyUpstreamHeaders(upstream, res);
-    res.status(upstream.status).send(payload);
-    logTimingEvent(trace, "completed", {
-      status: upstream.status,
-      bytes: payload.byteLength,
-    });
-  } catch (error: any) {
-    console.error("Request error:", error);
-    logTimingEvent(trace, "error", { message: error?.message || String(error) });
-    res.status(500).json(createProxyError(error.message));
+  function getConfig(provider: ProviderKey = currentProvider): ProviderConfig {
+    return getProviderConfig(provider);
   }
-}
 
-async function handleStreamingRequest(
-  req: express.Request,
-  res: express.Response
-) {
-  const config = getConfig();
+  function getTargetModel(requestedModel: unknown): string {
+    if (typeof requestedModel !== "string" || !requestedModel) {
+      return getConfig().model;
+    }
 
-  const targetModel = getTargetModel(req.body?.model);
-  const requestBody = buildUpstreamBody(req.body, targetModel);
-  const trace = createRequestTrace(req.body?.model, targetModel, true);
-  const abortController = new AbortController();
-  let clientClosed = false;
-  let streamCompleted = false;
-  let sawFirstChunk = false;
+    const normalizedModel = requestedModel.toLowerCase();
+    if (
+      normalizedModel === "opus" ||
+      normalizedModel === "sonnet" ||
+      normalizedModel === "haiku"
+    ) {
+      return getConfig().model;
+    }
 
-  console.log(
-    `\n[${new Date().toISOString()}] ${String(req.body?.model || config.model)} -> ${targetModel} (streaming)`
-  );
-  logTimingEvent(trace, "start");
+    if (
+      normalizedModel.startsWith("claude-") &&
+      (normalizedModel.includes("-opus") ||
+        normalizedModel.includes("-sonnet") ||
+        normalizedModel.includes("-haiku"))
+    ) {
+      return getConfig().model;
+    }
 
-  res.on("close", () => {
-    if (streamCompleted) return;
-    clientClosed = true;
-    abortController.abort();
-    logTimingEvent(trace, "client_aborted");
-  });
+    return requestedModel;
+  }
 
-  try {
-    const upstream = await fetch(getUpstreamUrl(config.baseUrl), {
-      method: "POST",
-      headers: buildUpstreamHeaders(req, true, config.apiKey),
-      body: JSON.stringify(requestBody),
-      signal: abortController.signal,
-    });
-    logTimingEvent(trace, "upstream_headers", {
-      status: upstream.status,
-      content_type: upstream.headers.get("content-type") || "",
-    });
+  function createRequestTrace(
+    requestedModel: unknown,
+    targetModel: string,
+    stream: boolean
+  ): RequestTrace {
+    return {
+      requestId: `req-${++requestSequence}`,
+      provider: currentProvider,
+      requestedModel: String(requestedModel || getConfig().model),
+      targetModel,
+      stream,
+      startedAt: Date.now(),
+    };
+  }
 
-    copyUpstreamHeaders(upstream, res);
-    res.status(upstream.status);
+  async function handleNonStreamingRequest(
+    req: express.Request,
+    res: express.Response
+  ) {
+    const config = getConfig();
+    const targetModel = getTargetModel(req.body?.model);
+    const requestBody = buildUpstreamBody(req.body, targetModel);
+    const trace = createRequestTrace(req.body?.model, targetModel, false);
 
-    if (!upstream.body) {
-      streamCompleted = true;
-      res.end();
+    console.log(
+      `\n[${new Date().toISOString()}] ${String(req.body?.model || config.model)} -> ${targetModel} (non-streaming)`
+    );
+    logTimingEvent(trace, "start");
+
+    try {
+      const upstream = await fetch(getUpstreamUrl(config.baseUrl), {
+        method: "POST",
+        headers: buildUpstreamHeaders(req, false, config.apiKey),
+        body: JSON.stringify(requestBody),
+      });
+      logTimingEvent(trace, "upstream_headers", {
+        status: upstream.status,
+        content_type: upstream.headers.get("content-type") || "",
+      });
+
+      const payload = Buffer.from(await upstream.arrayBuffer());
+      copyUpstreamHeaders(upstream, res);
+      res.status(upstream.status).send(payload);
       logTimingEvent(trace, "completed", {
         status: upstream.status,
-        bytes: 0,
-        no_body: true,
+        bytes: payload.byteLength,
       });
-      return;
-    }
-
-    const upstreamStream = Readable.fromWeb(upstream.body as any);
-    upstreamStream.on("data", (chunk) => {
-      if (sawFirstChunk) return;
-      sawFirstChunk = true;
-      const chunkSize = Buffer.isBuffer(chunk)
-        ? chunk.byteLength
-        : Buffer.byteLength(String(chunk));
-      logTimingEvent(trace, "first_chunk", {
-        status: upstream.status,
-        chunk_bytes: chunkSize,
-      });
-    });
-    upstreamStream.on("error", (error) => {
-      if (clientClosed) return;
-      console.error("Upstream stream error:", error);
+    } catch (error: any) {
+      console.error("Request error:", error);
       logTimingEvent(trace, "error", {
-        status: upstream.status,
         message: error?.message || String(error),
       });
-      if (!res.writableEnded) res.end();
+      res.status(500).json(createProxyError(error.message));
+    }
+  }
+
+  async function handleStreamingRequest(
+    req: express.Request,
+    res: express.Response
+  ) {
+    const config = getConfig();
+    const targetModel = getTargetModel(req.body?.model);
+    const requestBody = buildUpstreamBody(req.body, targetModel);
+    const trace = createRequestTrace(req.body?.model, targetModel, true);
+    const abortController = new AbortController();
+    let clientClosed = false;
+    let streamCompleted = false;
+    let sawFirstChunk = false;
+
+    console.log(
+      `\n[${new Date().toISOString()}] ${String(req.body?.model || config.model)} -> ${targetModel} (streaming)`
+    );
+    logTimingEvent(trace, "start");
+
+    res.on("close", () => {
+      if (streamCompleted) return;
+      clientClosed = true;
+      abortController.abort();
+      logTimingEvent(trace, "client_aborted");
     });
 
-    upstreamStream.pipe(res);
+    try {
+      const upstream = await fetch(getUpstreamUrl(config.baseUrl), {
+        method: "POST",
+        headers: buildUpstreamHeaders(req, true, config.apiKey),
+        body: JSON.stringify(requestBody),
+        signal: abortController.signal,
+      });
+      logTimingEvent(trace, "upstream_headers", {
+        status: upstream.status,
+        content_type: upstream.headers.get("content-type") || "",
+      });
 
-    await new Promise<void>((resolve, reject) => {
-      upstreamStream.on("end", () => {
+      copyUpstreamHeaders(upstream, res);
+      res.status(upstream.status);
+
+      if (!upstream.body) {
         streamCompleted = true;
+        res.end();
         logTimingEvent(trace, "completed", {
           status: upstream.status,
+          bytes: 0,
+          no_body: true,
         });
-        resolve();
+        return;
+      }
+
+      const upstreamStream = Readable.fromWeb(upstream.body as any);
+      upstreamStream.on("data", (chunk) => {
+        if (sawFirstChunk) return;
+        sawFirstChunk = true;
+        const chunkSize = Buffer.isBuffer(chunk)
+          ? chunk.byteLength
+          : Buffer.byteLength(String(chunk));
+        logTimingEvent(trace, "first_chunk", {
+          status: upstream.status,
+          chunk_bytes: chunkSize,
+        });
       });
-      upstreamStream.on("error", reject);
-      res.on("close", () => resolve());
-    });
-  } catch (error: any) {
-    const wasAborted =
-      error?.name === "AbortError" || abortController.signal.aborted;
+      upstreamStream.on("error", (error) => {
+        if (clientClosed) return;
+        console.error("Upstream stream error:", error);
+        logTimingEvent(trace, "error", {
+          status: upstream.status,
+          message: error?.message || String(error),
+        });
+        if (!res.writableEnded) res.end();
+      });
 
-    if (clientClosed || wasAborted) {
-      console.warn("[Proxy] Client disconnected, streaming aborted");
-      return;
+      upstreamStream.pipe(res);
+
+      await new Promise<void>((resolve, reject) => {
+        upstreamStream.on("end", () => {
+          streamCompleted = true;
+          logTimingEvent(trace, "completed", {
+            status: upstream.status,
+          });
+          resolve();
+        });
+        upstreamStream.on("error", reject);
+        res.on("close", () => resolve());
+      });
+    } catch (error: any) {
+      const wasAborted =
+        error?.name === "AbortError" || abortController.signal.aborted;
+
+      if (clientClosed || wasAborted) {
+        console.warn("[Proxy] Client disconnected, streaming aborted");
+        return;
+      }
+
+      console.error("Request error:", error);
+      logTimingEvent(trace, "error", {
+        message: error?.message || String(error),
+      });
+      if (!res.headersSent) {
+        res.status(500).json(createProxyError(error.message));
+        return;
+      }
+
+      if (!res.writableEnded) res.end();
     }
-
-    console.error("Request error:", error);
-    logTimingEvent(trace, "error", { message: error?.message || String(error) });
-    if (!res.headersSent) {
-      res.status(500).json(createProxyError(error.message));
-      return;
-    }
-
-    if (!res.writableEnded) res.end();
   }
-}
 
-export function createApp(): express.Express {
   const app = express();
 
   app.use(cors());
@@ -457,19 +468,7 @@ export function createApp(): express.Express {
       model?: string;
     };
 
-    let targetProvider = provider;
-    if (!targetProvider && model) {
-      const normalizedModel = model.toLowerCase();
-      if (normalizedModel.includes("kimi")) {
-        targetProvider = "kimi";
-      } else if (normalizedModel.includes("qwen")) targetProvider = "qwen";
-      else if (normalizedModel.includes("deepseek"))
-        targetProvider = "deepseek";
-      else if (normalizedModel.includes("glm")) targetProvider = "glm";
-      else if (normalizedModel.includes("minimax")) {
-        targetProvider = "minimax";
-      }
-    }
+    const targetProvider = provider ?? inferProviderFromModel(model);
 
     if (!isProviderKey(targetProvider)) {
       res.status(400).json({
@@ -511,21 +510,35 @@ function isMainModule() {
   if (!entryPath) return false;
 
   try {
-    return realpathSync(entryPath) === realpathSync(fileURLToPath(import.meta.url));
+    return (
+      realpathSync(entryPath) === realpathSync(fileURLToPath(import.meta.url))
+    );
   } catch {
     return false;
   }
 }
 
 if (isMainModule()) {
+  const initialProvider = getInitialProvider();
+  const initialConfig = getProviderConfig(initialProvider);
+
+  if (!initialConfig.apiKey) {
+    console.warn(
+      `Warning: API key not configured for provider: ${initialProvider}`
+    );
+    console.warn("Please set the appropriate environment variable in .env");
+  }
+
+  console.log(`Using ${initialProvider} as backend`);
+  console.log(`Model: ${initialConfig.model}`);
+
   app.listen(PORT, () => {
-    const cfg = getConfig();
     console.log(`
 ╔════════════════════════════════════════════════╗
 ║         claude-proxy                           ║
 ╠════════════════════════════════════════════════╣
 ║  http://localhost:${PORT}
-║  Backend: ${currentProvider} (${cfg.model})
+║  Backend: ${initialProvider} (${initialConfig.model})
 ╠════════════════════════════════════════════════╣
 ║  Set these env vars in your app:               ║
 ║  ANTHROPIC_BASE_URL=http://localhost:${PORT}

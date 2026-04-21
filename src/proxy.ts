@@ -437,7 +437,7 @@ export function createApp(): express.Express {
   app.get("/v1/models", (_req, res) => {
     res.json({
       data: [
-        { id: "claude-opus-4-6", object: "model" },
+        { id: "claude-opus-4-7", object: "model" },
         { id: "claude-sonnet-4-6", object: "model" },
         { id: "claude-haiku-4-5", object: "model" },
       ],
@@ -527,13 +527,13 @@ if (isMainModule()) {
   app.listen(PORT, () => {
     console.log(`
 ╔═══════════════════════════════════════════════════════╗
-║                     claude-proxy                      ║
+║                claude-proxy                           ║
 ╠═══════════════════════════════════════════════════════╣
-║  http://localhost:${PORT}                             ║
-║  Backend: ${initialProvider} (${initialConfig.model}) ║
+║  http://localhost:${PORT}
+║  Backend: ${initialProvider} (${initialConfig.model})
 ╠═══════════════════════════════════════════════════════╣
 ║  Set these env vars in your app:                      ║
-║  ANTHROPIC_BASE_URL=http://localhost:${PORT}          ║
+║  ANTHROPIC_BASE_URL=http://localhost:${PORT}
 ║  ANTHROPIC_API_KEY=any-string-works                   ║
 ╚═══════════════════════════════════════════════════════╝
   `);

@@ -6,3 +6,4 @@ AGENTS.md
 .env
 .artifacts/
 .npmrc
+.trae/

@@ -121,20 +121,21 @@ app.listen(8080);
 
 ## Release Verification
 
-`v1.0.0` was verified on April 15, 2026 after publishing `@sunflower0305/claude-proxy` to npm.
+`v1.1.0` was verified on April 21, 2026 after publishing `@sunflower0305/claude-proxy` to npm.
 
 Verified items:
 
+- `npm view @sunflower0305/claude-proxy version dist-tags --json` confirmed `version: 1.1.0` and `latest: 1.1.0`
 - `npm install @sunflower0305/claude-proxy` completed successfully in a clean temporary directory
 - the published `claude-proxy` CLI started correctly from the installed package
 - `GET /health` and `GET /v1/models` returned `200 OK`
-- end-to-end proxying against a local mock Anthropic-compatible upstream passed for both non-streaming and streaming `POST /v1/messages`
-- end-to-end proxying against the real Qwen Anthropic-compatible upstream passed for both non-streaming and streaming `POST /v1/messages`
+- local end-to-end proxying against a mock Anthropic-compatible upstream passed for both non-streaming and streaming `POST /v1/messages`
 
 Observed behavior during verification:
 
-- model remapping worked as expected, including `claude-sonnet-4-6 -> qwen-plus`
-- the real Qwen verification returned a valid assistant response for both buffered JSON and SSE streaming modes
+- smoke-test startup succeeded with `PROVIDER=qwen`
+- the published artifact returned the expected `health` payload with `provider: qwen` and `model: qwen-plus`
+- the published artifact returned the expected Claude-facing model list from `GET /v1/models`
 - the published package included the expected CLI entrypoint, `dist/` build output, `README.md`, `LICENSE`, and `.env.example`
 
 ## Development
@@ -171,7 +172,7 @@ Local integration test:
 npm run test:proxy-local
 ```
 
-Release notes for `v1.0.0` are available in [docs/releases/1.0.0.md](/Users/joe/ai/claude-proxy/docs/releases/1.0.0.md).
+Release notes for `v1.1.0` are available in [docs/releases/1.1.0.md](/Users/joe/ai/claude-proxy/docs/releases/1.1.0.md).
 
 ## License
 

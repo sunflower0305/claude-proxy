@@ -267,9 +267,6 @@ export function createApp(): express.Express {
     const requestBody = buildUpstreamBody(req.body, targetModel);
     const trace = createRequestTrace(req.body?.model, targetModel, false);
 
-    console.log(
-      `\n[${new Date().toISOString()}] ${String(req.body?.model || config.model)} -> ${targetModel} (non-streaming)`
-    );
     logTimingEvent(trace, "start");
 
     try {
@@ -312,9 +309,6 @@ export function createApp(): express.Express {
     let streamCompleted = false;
     let sawFirstChunk = false;
 
-    console.log(
-      `\n[${new Date().toISOString()}] ${String(req.body?.model || config.model)} -> ${targetModel} (streaming)`
-    );
     logTimingEvent(trace, "start");
 
     res.on("close", () => {

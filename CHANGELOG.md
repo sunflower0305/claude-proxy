@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-04-21
+
+Second public npm release of `@sunflower0305/claude-proxy`.
+
+### Added
+
+- GitHub Actions CI workflow for build, local integration tests, and coverage reporting
+- broader local integration coverage for `qwen`, `glm`, and `minimax`
+
+### Changed
+
+- proxy runtime state is now isolated per `createApp()` instance to support multiple app instances safely
+- model and provider inference logic was refactored to better handle dynamic provider identification
+- startup banner formatting and release documentation were polished
+- Kimi documentation and default model references were updated to `kimi-k2.6`
+
+### Fixed
+
+- test cleanup now avoids duplicate resource shutdowns
+- redundant proxy console logging was removed to reduce noise and overhead
+
+Detailed release notes: [docs/releases/1.1.0.md](/Users/joe/ai/claude-proxy/docs/releases/1.1.0.md)
+
 ## [1.0.0] - 2026-04-15
 
 First public npm release of `@sunflower0305/claude-proxy`.

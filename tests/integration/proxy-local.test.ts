@@ -480,7 +480,7 @@ describe.sequential("proxy local integration", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       data: [
-        { id: "claude-opus-4-6", object: "model" },
+        { id: "claude-opus-4-7", object: "model" },
         { id: "claude-sonnet-4-6", object: "model" },
         { id: "claude-haiku-4-5", object: "model" },
       ],

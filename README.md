@@ -1,6 +1,7 @@
 # claude-proxy
 
 [![CI](https://github.com/sunflower0305/claude-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/sunflower0305/claude-proxy/actions/workflows/ci.yml)
+[![CD](https://github.com/sunflower0305/claude-proxy/actions/workflows/cd.yml/badge.svg)](https://github.com/sunflower0305/claude-proxy/actions/workflows/cd.yml)
 [![Coverage Status](https://coveralls.io/repos/github/sunflower0305/claude-proxy/badge.svg?branch=master)](https://coveralls.io/github/sunflower0305/claude-proxy?branch=master)
 [![npm version](https://img.shields.io/npm/v/%40sunflower0305%2Fclaude-proxy)](https://www.npmjs.com/package/@sunflower0305/claude-proxy)
 [![License](https://img.shields.io/github/license/sunflower0305/claude-proxy)](https://github.com/sunflower0305/claude-proxy/blob/master/LICENSE)
@@ -39,17 +40,17 @@ QWEN_MODEL=qwen-plus
 
 Available variables:
 
-| Variable | Purpose |
-| --- | --- |
-| `PROVIDER` | Active provider. Defaults to `qwen`. |
-| `PROXY_PORT` | Local server port. Defaults to `8080`. |
-| `QWEN_API_KEY` | API key for Qwen. |
-| `DEEPSEEK_API_KEY` | API key for DeepSeek. |
-| `GLM_API_KEY` | API key for GLM. |
-| `MINIMAX_API_KEY` | API key for MiniMax. |
-| `KIMI_API_KEY` | API key for Kimi. |
+| Variable                                                                                                                                    | Purpose                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `PROVIDER`                                                                                                                                  | Active provider. Defaults to `qwen`.                                |
+| `PROXY_PORT`                                                                                                                                | Local server port. Defaults to `8080`.                              |
+| `QWEN_API_KEY`                                                                                                                              | API key for Qwen.                                                   |
+| `DEEPSEEK_API_KEY`                                                                                                                          | API key for DeepSeek.                                               |
+| `GLM_API_KEY`                                                                                                                               | API key for GLM.                                                    |
+| `MINIMAX_API_KEY`                                                                                                                           | API key for MiniMax.                                                |
+| `KIMI_API_KEY`                                                                                                                              | API key for Kimi.                                                   |
 | `QWEN_ANTHROPIC_BASE_URL`, `DEEPSEEK_ANTHROPIC_BASE_URL`, `GLM_ANTHROPIC_BASE_URL`, `MINIMAX_ANTHROPIC_BASE_URL`, `KIMI_ANTHROPIC_BASE_URL` | Override the upstream Anthropic-compatible base URL for a provider. |
-| `QWEN_MODEL`, `DEEPSEEK_MODEL`, `GLM_MODEL`, `MINIMAX_MODEL`, `KIMI_MODEL` | Override the default upstream model for a provider. |
+| `QWEN_MODEL`, `DEEPSEEK_MODEL`, `GLM_MODEL`, `MINIMAX_MODEL`, `KIMI_MODEL`                                                                  | Override the default upstream model for a provider.                 |
 
 You can use the bundled example as a starting point:
 
@@ -87,12 +88,12 @@ const client = new Anthropic({
 
 ## Runtime Endpoints
 
-| Method | Path | Description |
-| --- | --- | --- |
-| `POST` | `/v1/messages` | Main Anthropic Messages API proxy endpoint |
-| `GET` | `/v1/models` | Lists supported Claude-facing model ids |
-| `GET` | `/health` | Health check |
-| `GET` / `POST` | `/api/provider` | Read or switch the active provider |
+| Method         | Path            | Description                                |
+| -------------- | --------------- | ------------------------------------------ |
+| `POST`         | `/v1/messages`  | Main Anthropic Messages API proxy endpoint |
+| `GET`          | `/v1/models`    | Lists supported Claude-facing model ids    |
+| `GET`          | `/health`       | Health check                               |
+| `GET` / `POST` | `/api/provider` | Read or switch the active provider         |
 
 Health check:
 
@@ -149,15 +150,32 @@ npm run dev
 
 ## CI And Releases
 
-GitHub Actions currently provides a CI baseline only:
+GitHub Actions provides separate CI and CD workflows:
 
-- install dependencies with `pnpm`
-- run `npm run build`
-- run `npm run test:proxy-local`
-- run `npm run test:coverage`
-- upload `coverage/lcov.info` to Coveralls without blocking the workflow if the upload service is temporarily unavailable
+- `CI` runs on branch pushes and pull requests
+- `CD` runs when you push a `vX.Y.Z` tag and can also be re-run manually with `workflow_dispatch`
 
-Publishing to npm remains a manual step. The package still relies on `prepack` and `prepublishOnly` in `package.json` to build and verify the artifact before release.
+The `CD` workflow:
+
+- checks that the tag exactly matches `package.json.version`
+- requires `docs/releases/<version>.md` to exist before publishing
+- runs `npm run build`, `npm run test:proxy-local`, `npm run test:coverage`, and `npm pack --dry-run`
+- fails fast if the npm version already exists
+- publishes the package to npm using the `NPM_TOKEN` repository secret
+- creates or updates the GitHub Release from `docs/releases/<version>.md`
+
+Required repository secret:
+
+- `NPM_TOKEN`: npm automation token with permission to publish `@sunflower0305/claude-proxy`
+
+Release flow:
+
+1. bump `package.json`, `CHANGELOG.md`, and `docs/releases/<version>.md`
+2. commit the release prep
+3. create and push the matching `vX.Y.Z` tag
+4. let the `CD` workflow publish npm and GitHub Release
+
+The package still relies on `prepack` and `prepublishOnly` in `package.json` to build and verify the artifact before release.
 
 Build and local package verification:
 

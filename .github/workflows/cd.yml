@@ -1,0 +1,118 @@
+name: CD
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (for example: v1.2.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Resolve release metadata
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+
+          if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Expected tag in vX.Y.Z format, got: ${tag}" >&2
+            exit 1
+          fi
+
+          version="${tag#v}"
+          package_version="$(node -p "require('./package.json').version")"
+          package_name="$(node -p "require('./package.json').name")"
+          release_notes="docs/releases/${version}.md"
+
+          if [[ "${package_version}" != "${version}" ]]; then
+            echo "Tag ${tag} does not match package.json version ${package_version}" >&2
+            exit 1
+          fi
+
+          if [[ ! -f "${release_notes}" ]]; then
+            echo "Missing release notes file: ${release_notes}" >&2
+            exit 1
+          fi
+
+          {
+            echo "tag=${tag}"
+            echo "version=${version}"
+            echo "package_name=${package_name}"
+            echo "release_notes=${release_notes}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Fail if version already exists on npm
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if npm view "${{ steps.release.outputs.package_name }}@${{ steps.release.outputs.version }}" version >/dev/null 2>&1; then
+            echo "Version ${{ steps.release.outputs.version }} is already published to npm" >&2
+            exit 1
+          fi
+
+      - name: Build
+        run: npm run build
+
+      - name: Run local integration tests
+        run: npm run test:proxy-local
+
+      - name: Generate coverage report
+        run: npm run test:coverage
+
+      - name: Verify publish artifact
+        run: env npm_config_cache=/tmp/claude-proxy-npm-cache npm pack --dry-run
+
+      - name: Publish package to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: ${{ steps.release.outputs.tag }}
+          body_path: ${{ steps.release.outputs.release_notes }}
+          draft: false
+          prerelease: false
+          generate_release_notes: false

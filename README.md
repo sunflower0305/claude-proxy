@@ -172,7 +172,7 @@ Local integration test:
 npm run test:proxy-local
 ```
 
-Release notes for `v1.1.0` are available in [docs/releases/1.1.0.md](/Users/joe/ai/claude-proxy/docs/releases/1.1.0.md).
+Release notes for `v1.1.0` are available in [docs/releases/1.1.0.md](docs/releases/1.1.0.md).
 
 ## License
 

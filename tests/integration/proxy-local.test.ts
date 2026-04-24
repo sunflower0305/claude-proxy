@@ -23,7 +23,9 @@ interface TestHarness {
 interface ForwardedRequestExpectation {
   expectedModel: string;
   metadata: Record<string, unknown>;
+  anthropicVersion?: string;
   anthropicBeta?: string;
+  accept?: string;
   stream?: boolean;
 }
 
@@ -54,7 +56,11 @@ const claudeAliasModels = [
   "haiku",
 ] as const;
 const providerInferenceCases = [
-  { model: "kimi-k2.5", expectedProvider: "kimi", expectedModel: kimiUpstreamModel },
+  {
+    model: "kimi-k2.5",
+    expectedProvider: "kimi",
+    expectedModel: kimiUpstreamModel,
+  },
   {
     model: "minimax-m2",
     expectedProvider: "minimax",
@@ -79,6 +85,7 @@ const testEnvKeys = [
   "KIMI_API_KEY",
   "KIMI_MODEL",
   "KIMI_ANTHROPIC_BASE_URL",
+  "PROXY_PORT",
 ] as const;
 
 type ProviderCase = (typeof providerCases)[number];
@@ -229,7 +236,12 @@ function expectForwardedRequest(
   const forwardedRequest = getLastRecordedRequest(harness);
 
   expect(forwardedRequest.headers["x-api-key"]).toBe(upstreamApiKey);
-  expect(forwardedRequest.headers["anthropic-version"]).toBe("2023-06-01");
+  expect(forwardedRequest.headers["anthropic-version"]).toBe(
+    expectation.anthropicVersion ?? "2023-06-01"
+  );
+  expect(forwardedRequest.headers.accept).toBe(
+    expectation.accept ?? "*/*"
+  );
   if (expectation.anthropicBeta) {
     expect(forwardedRequest.headers["anthropic-beta"]).toBe(
       expectation.anthropicBeta
@@ -281,6 +293,22 @@ async function createHarness(envOverrides: EnvOverrides = {}): Promise<TestHarne
       return;
     }
 
+    if (body?.metadata?.case === "stream-no-body") {
+      res.statusCode = 204;
+      res.end();
+      return;
+    }
+
+    if (body?.metadata?.case === "stream-chunks") {
+      res.statusCode = 200;
+      res.setHeader("content-type", "text/event-stream; charset=utf-8");
+      res.setHeader("cache-control", "no-cache");
+      res.write("event: message_start\n");
+      res.write('data: {"type":"message_start"}\n\n');
+      res.end('event: message_stop\ndata: {"type":"message_stop"}\n\n');
+      return;
+    }
+
     if (body?.stream) {
       res.statusCode = 200;
       res.setHeader("content-type", "text/event-stream; charset=utf-8");
@@ -329,6 +357,7 @@ async function createHarness(envOverrides: EnvOverrides = {}): Promise<TestHarne
     KIMI_API_KEY: upstreamApiKey,
     KIMI_MODEL: kimiUpstreamModel,
     KIMI_ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+    PROXY_PORT: undefined,
     ...envOverrides,
   };
 
@@ -396,6 +425,40 @@ async function postMessages(
   });
 }
 
+function sendRawPost(
+  url: string,
+  body: string,
+  headers: Record<string, string>
+): Promise<{ status: number; text: string }> {
+  return new Promise((resolve, reject) => {
+    const request = http.request(
+      url,
+      {
+        method: "POST",
+        headers: {
+          "content-length": Buffer.byteLength(body).toString(),
+          ...headers,
+        },
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        response.on("end", () => {
+          resolve({
+            status: response.statusCode ?? 0,
+            text: Buffer.concat(chunks).toString("utf8"),
+          });
+        });
+      }
+    );
+
+    request.on("error", reject);
+    request.end(body);
+  });
+}
+
 describe.sequential("proxy local integration", () => {
   let harness: TestHarness;
   let cleanupHarness: TestHarness | undefined;
@@ -409,6 +472,111 @@ describe.sequential("proxy local integration", () => {
     if (!cleanupHarness) return;
     await cleanupHarness.close();
     cleanupHarness = undefined;
+  });
+
+  it("reports proxy metadata from the root endpoint", async () => {
+    const response = await fetch(`${harness.proxyBaseUrl}/`);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      name: "claude-proxy",
+      status: "running",
+      provider: "deepseek",
+      model: upstreamModel,
+      endpoints: {
+        messages: "POST /v1/messages",
+        health: "GET /health",
+        models: "GET /v1/models",
+        provider: "GET|POST /api/provider",
+      },
+    });
+  });
+
+  it.each([
+    { provider: undefined, label: "missing" },
+    { provider: "not-a-provider", label: "invalid" },
+  ])("defaults to qwen when PROVIDER is $label", async ({ provider }) => {
+    await cleanupHarness?.close();
+    harness = await createHarness({ PROVIDER: provider });
+    cleanupHarness = harness;
+
+    const [healthResponse, providerResponse] = await Promise.all([
+      fetch(`${harness.proxyBaseUrl}/health`),
+      fetch(`${harness.proxyBaseUrl}/api/provider`),
+    ]);
+
+    expect(healthResponse.status).toBe(200);
+    await expect(healthResponse.json()).resolves.toEqual({
+      status: "ok",
+      provider: "qwen",
+      model: qwenUpstreamModel,
+    });
+
+    expect(providerResponse.status).toBe(200);
+    expectProviderState(
+      await providerResponse.json(),
+      "qwen",
+      qwenUpstreamModel,
+      harness.upstreamPort
+    );
+  });
+
+  it("uses qwen default model and base URL when env overrides are absent", async () => {
+    await cleanupHarness?.close();
+    harness = await createHarness({
+      PROVIDER: undefined,
+      QWEN_MODEL: undefined,
+      QWEN_ANTHROPIC_BASE_URL: undefined,
+    });
+    cleanupHarness = harness;
+
+    const response = await fetch(`${harness.proxyBaseUrl}/api/provider`);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      provider: "qwen",
+      model: "qwen-plus",
+      baseUrl: "https://dashscope.aliyuncs.com/apps/anthropic",
+      availableProviders,
+    });
+  });
+
+  it("imports as a library when the process entrypoint is missing or invalid", async () => {
+    await cleanupHarness?.close();
+    cleanupHarness = undefined;
+
+    const originalArgv1 = process.argv[1];
+    const envBackup = Object.fromEntries(
+      testEnvKeys.map((key) => [key, process.env[key]])
+    ) as Record<TestEnvKey, string | undefined>;
+
+    try {
+      for (const key of testEnvKeys) {
+        setEnv(key, undefined);
+      }
+
+      delete process.argv[1];
+      vi.resetModules();
+      await expect(import("../../src/proxy.ts")).resolves.toHaveProperty(
+        "createApp"
+      );
+
+      process.argv[1] = "/path/that/does/not/exist/claude-proxy.js";
+      vi.resetModules();
+      await expect(import("../../src/proxy.ts")).resolves.toHaveProperty(
+        "createApp"
+      );
+    } finally {
+      if (originalArgv1 === undefined) {
+        delete process.argv[1];
+      } else {
+        process.argv[1] = originalArgv1;
+      }
+      for (const key of testEnvKeys) {
+        setEnv(key, envBackup[key]);
+      }
+      vi.resetModules();
+    }
   });
 
   it.each(providerCases)(
@@ -611,6 +779,90 @@ describe.sequential("proxy local integration", () => {
     });
   });
 
+  it("forwards custom Anthropic version and accept headers", async () => {
+    const metadata = { case: "success", trace_id: "custom-headers" };
+
+    await switchProvider(harness.proxyBaseUrl, "deepseek");
+
+    const response = await postMessages(
+      harness,
+      { metadata },
+      {
+        accept: "application/json",
+        "anthropic-version": "2024-01-01",
+      }
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      model: upstreamModel,
+      metadata_echo: metadata,
+    });
+
+    expectForwardedRequest(harness, {
+      expectedModel: upstreamModel,
+      metadata,
+      anthropicVersion: "2024-01-01",
+      accept: "application/json",
+    });
+  });
+
+  it("builds a provider-model upstream body when the client body is not parsed", async () => {
+    await switchProvider(harness.proxyBaseUrl, "deepseek");
+
+    const response = await fetch(`${harness.proxyBaseUrl}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "text/plain",
+        "x-api-key": "client-placeholder",
+      },
+      body: "raw text body",
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      model: upstreamModel,
+    });
+
+    const forwardedRequest = getLastRecordedRequest(harness);
+    expect(forwardedRequest.body).toEqual({ model: upstreamModel });
+  });
+
+  it.each([
+    { stream: false, expectedAccept: "application/json" },
+    { stream: true, expectedAccept: "text/event-stream" },
+  ])(
+    "adds the default upstream accept header when stream is $stream and the client omits accept",
+    async ({ stream, expectedAccept }) => {
+      await switchProvider(harness.proxyBaseUrl, "deepseek");
+
+      const metadata = {
+        case: stream ? "stream-no-body" : "success",
+        trace_id: `no-accept-${stream}`,
+      };
+      const body = JSON.stringify({
+        ...harness.requestPayload,
+        stream,
+        metadata,
+      });
+
+      const response = await sendRawPost(
+        `${harness.proxyBaseUrl}/v1/messages`,
+        body,
+        {
+          "content-type": "application/json",
+          "x-api-key": "client-placeholder",
+        }
+      );
+
+      expect(response.status).toBe(stream ? 204 : 200);
+      const forwardedRequest = getLastRecordedRequest(harness);
+      expect(forwardedRequest.headers.accept).toBe(expectedAccept);
+      expect(forwardedRequest.body.model).toBe(upstreamModel);
+      expect(forwardedRequest.body.metadata).toEqual(metadata);
+    }
+  );
+
   it.each(streamingProviderCases)(
     "passes through upstream sse stream unchanged for $provider",
     async ({ provider, expectedModel }) => {
@@ -637,6 +889,45 @@ describe.sequential("proxy local integration", () => {
     }
   );
 
+  it("logs only the first stream chunk while passing through chunked SSE", async () => {
+    await switchProvider(harness.proxyBaseUrl, "deepseek");
+
+    const response = await postMessages(harness, {
+      stream: true,
+      metadata: { case: "stream-chunks", trace_id: "stream-chunks" },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.text()).resolves.toBe(
+      'event: message_start\ndata: {"type":"message_start"}\n\n' +
+        'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+    );
+
+    expectForwardedRequest(harness, {
+      expectedModel: upstreamModel,
+      metadata: { case: "stream-chunks", trace_id: "stream-chunks" },
+      stream: true,
+    });
+  });
+
+  it("ends a stream response when the upstream returns no body", async () => {
+    await switchProvider(harness.proxyBaseUrl, "deepseek");
+
+    const response = await postMessages(harness, {
+      stream: true,
+      metadata: { case: "stream-no-body", trace_id: "stream-no-body" },
+    });
+
+    expect(response.status).toBe(204);
+    await expect(response.text()).resolves.toBe("");
+
+    expectForwardedRequest(harness, {
+      expectedModel: upstreamModel,
+      metadata: { case: "stream-no-body", trace_id: "stream-no-body" },
+      stream: true,
+    });
+  });
+
   it("returns a proxy error when the streaming upstream is unreachable", async () => {
     await cleanupHarness?.close();
     harness = await createHarness({
@@ -647,6 +938,26 @@ describe.sequential("proxy local integration", () => {
     const response = await postMessages(harness, {
       stream: true,
       metadata: { case: "stream", trace_id: "stream-upstream-error" },
+    });
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      type: "error",
+      error: {
+        type: "internal_error",
+      },
+    });
+  });
+
+  it("returns a proxy error when the non-streaming upstream is unreachable", async () => {
+    await cleanupHarness?.close();
+    harness = await createHarness({
+      DEEPSEEK_ANTHROPIC_BASE_URL: "http://127.0.0.1:1",
+    });
+    cleanupHarness = harness;
+
+    const response = await postMessages(harness, {
+      metadata: { case: "success", trace_id: "non-stream-upstream-error" },
     });
 
     expect(response.status).toBe(500);
@@ -691,6 +1002,22 @@ describe.sequential("proxy local integration", () => {
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
       error: "Unknown provider: qwen-plus",
+      available: availableProviders,
+    });
+  });
+
+  it("rejects provider switch requests when the body is not parsed", async () => {
+    const response = await sendRawPost(
+      `${harness.proxyBaseUrl}/api/provider`,
+      "provider=kimi",
+      {
+        "content-type": "text/plain",
+      }
+    );
+
+    expect(response.status).toBe(400);
+    expect(JSON.parse(response.text)).toEqual({
+      error: "Unknown provider: undefined",
       available: availableProviders,
     });
   });
@@ -787,6 +1114,7 @@ describe.sequential("proxy local integration", () => {
       KIMI_API_KEY: upstreamApiKey,
       KIMI_MODEL: kimiUpstreamModel,
       KIMI_ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      PROXY_PORT: undefined,
     };
 
     for (const key of testEnvKeys) {

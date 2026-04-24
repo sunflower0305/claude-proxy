@@ -141,6 +141,10 @@ npm install
 npm run dev
 ```
 
+## Changelog
+
+See [CHANGELOG.md](https://github.com/sunflower0305/claude-proxy/blob/master/CHANGELOG.md) and [GitHub Releases](https://github.com/sunflower0305/claude-proxy/releases) for release notes.
+
 ## License
 
 MIT

@@ -1,6 +1,6 @@
 {
   "name": "@sunflower0305/claude-proxy",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "type": "module",
   "description": "A proxy that lets Claude Agent SDK use domestic Chinese LLMs (DeepSeek, Qwen, GLM, MiniMax) as backend",
   "license": "MIT",
@@ -18,6 +18,7 @@
   "files": [
     "dist/",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE",
     ".env.example"
   ],

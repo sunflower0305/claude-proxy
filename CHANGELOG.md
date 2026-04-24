@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.3] - 2026-04-24
+
+Patch release of `@sunflower0305/claude-proxy`.
+
+### Added
+
+- README Changelog section linking to release notes from the npm package page
+- `CHANGELOG.md` is now included in the published npm package
+
+Detailed release notes: [docs/releases/1.1.3.md](docs/releases/1.1.3.md)
+
 ## [1.1.2] - 2026-04-24
 
 Patch release of `@sunflower0305/claude-proxy`.

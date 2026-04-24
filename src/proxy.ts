@@ -60,7 +60,7 @@ const PROVIDERS = {
       pickEnv("DEEPSEEK_ANTHROPIC_BASE_URL") ||
       "https://api.deepseek.com/anthropic",
     apiKey: process.env.DEEPSEEK_API_KEY || "",
-    model: pickEnv("DEEPSEEK_MODEL") || "deepseek-chat",
+    model: pickEnv("DEEPSEEK_MODEL") || "deepseek-v4-pro",
   },
   qwen: {
     baseUrl:
@@ -98,11 +98,11 @@ function isProviderKey(value: string | undefined): value is ProviderKey {
 }
 
 function getInitialProvider(): ProviderKey {
-  return isProviderKey(process.env.PROVIDER) ? process.env.PROVIDER : "qwen";
+  return isProviderKey(process.env.PROVIDER) ? process.env.PROVIDER : "deepseek";
 }
 
 function getProviderConfig(provider: ProviderKey): ProviderConfig {
-  return PROVIDERS[provider] || PROVIDERS.qwen;
+  return PROVIDERS[provider] || PROVIDERS.deepseek;
 }
 
 function getHeaderValue(

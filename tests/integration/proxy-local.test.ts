@@ -495,7 +495,7 @@ describe.sequential("proxy local integration", () => {
   it.each([
     { provider: undefined, label: "missing" },
     { provider: "not-a-provider", label: "invalid" },
-  ])("defaults to qwen when PROVIDER is $label", async ({ provider }) => {
+  ])("defaults to deepseek when PROVIDER is $label", async ({ provider }) => {
     await cleanupHarness?.close();
     harness = await createHarness({ PROVIDER: provider });
     cleanupHarness = harness;
@@ -508,25 +508,25 @@ describe.sequential("proxy local integration", () => {
     expect(healthResponse.status).toBe(200);
     await expect(healthResponse.json()).resolves.toEqual({
       status: "ok",
-      provider: "qwen",
-      model: qwenUpstreamModel,
+      provider: "deepseek",
+      model: upstreamModel,
     });
 
     expect(providerResponse.status).toBe(200);
     expectProviderState(
       await providerResponse.json(),
-      "qwen",
-      qwenUpstreamModel,
+      "deepseek",
+      upstreamModel,
       harness.upstreamPort
     );
   });
 
-  it("uses qwen default model and base URL when env overrides are absent", async () => {
+  it("uses deepseek default model and base URL when env overrides are absent", async () => {
     await cleanupHarness?.close();
     harness = await createHarness({
       PROVIDER: undefined,
-      QWEN_MODEL: undefined,
-      QWEN_ANTHROPIC_BASE_URL: undefined,
+      DEEPSEEK_MODEL: undefined,
+      DEEPSEEK_ANTHROPIC_BASE_URL: undefined,
     });
     cleanupHarness = harness;
 
@@ -534,9 +534,9 @@ describe.sequential("proxy local integration", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      provider: "qwen",
-      model: "qwen-plus",
-      baseUrl: "https://dashscope.aliyuncs.com/apps/anthropic",
+      provider: "deepseek",
+      model: "deepseek-v4-pro",
+      baseUrl: "https://api.deepseek.com/anthropic",
       availableProviders,
     });
   });

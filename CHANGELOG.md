@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.2] - 2026-04-24
+
+Patch release of `@sunflower0305/claude-proxy`.
+
+### Added
+
+- README provider defaults table covering all supported providers and their default models
+
+### Changed
+
+- default provider changed from `qwen` to `deepseek`
+- default DeepSeek model changed from `deepseek-chat` to `deepseek-v4-pro`
+- README now focuses on installation, configuration, runtime usage, and development setup
+
+Detailed release notes: [docs/releases/1.1.2.md](docs/releases/1.1.2.md)
+
 ## [1.1.1] - 2026-04-21
 
 Patch release of `@sunflower0305/claude-proxy`.

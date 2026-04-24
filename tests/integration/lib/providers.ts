@@ -29,7 +29,7 @@ export function getProviderDefinitions(): ProviderDefinition[] {
       baseUrl:
         pickEnv("DEEPSEEK_ANTHROPIC_BASE_URL") ||
         "https://api.deepseek.com/anthropic",
-      model: pickEnv("DEEPSEEK_MODEL") || "deepseek-chat",
+      model: pickEnv("DEEPSEEK_MODEL") || "deepseek-v4-pro",
     },
     {
       key: "qwen",

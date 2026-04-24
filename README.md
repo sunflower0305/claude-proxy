@@ -34,17 +34,17 @@ The proxy reads configuration from environment variables. You can export them in
 Example `.env`:
 
 ```dotenv
-PROVIDER=qwen
+PROVIDER=deepseek
 PROXY_PORT=8080
-QWEN_API_KEY=your-qwen-api-key
-QWEN_MODEL=qwen-plus
+DEEPSEEK_API_KEY=your-deepseek-api-key
+DEEPSEEK_MODEL=deepseek-v4-pro
 ```
 
 Available variables:
 
 | Variable                                                                                                                                    | Purpose                                                             |
 | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `PROVIDER`                                                                                                                                  | Active provider. Defaults to `qwen`.                                |
+| `PROVIDER`                                                                                                                                  | Active provider. Defaults to `deepseek`.                            |
 | `PROXY_PORT`                                                                                                                                | Local server port. Defaults to `8080`.                              |
 | `QWEN_API_KEY`                                                                                                                              | API key for Qwen.                                                   |
 | `DEEPSEEK_API_KEY`                                                                                                                          | API key for DeepSeek.                                               |
@@ -53,6 +53,16 @@ Available variables:
 | `KIMI_API_KEY`                                                                                                                              | API key for Kimi.                                                   |
 | `QWEN_ANTHROPIC_BASE_URL`, `DEEPSEEK_ANTHROPIC_BASE_URL`, `GLM_ANTHROPIC_BASE_URL`, `MINIMAX_ANTHROPIC_BASE_URL`, `KIMI_ANTHROPIC_BASE_URL` | Override the upstream Anthropic-compatible base URL for a provider. |
 | `QWEN_MODEL`, `DEEPSEEK_MODEL`, `GLM_MODEL`, `MINIMAX_MODEL`, `KIMI_MODEL`                                                                  | Override the default upstream model for a provider.                 |
+
+Provider defaults:
+
+| Provider | Model env | Default model |
+| --- | --- | --- |
+| **`deepseek` (default)** | `DEEPSEEK_MODEL` | **`deepseek-v4-pro`** |
+| `qwen` | `QWEN_MODEL` | `qwen-plus` |
+| `glm` | `GLM_MODEL` | `glm-5.1` |
+| `minimax` | `MINIMAX_MODEL` | `MiniMax-M2.7-highspeed` |
+| `kimi` | `KIMI_MODEL` | `kimi-k2.6` |
 
 You can use the bundled example as a starting point:
 
@@ -108,7 +118,7 @@ Switch provider at runtime:
 ```bash
 curl -X POST http://localhost:8080/api/provider \
   -H "Content-Type: application/json" \
-  -d '{"provider":"deepseek"}'
+  -d '{"provider":"qwen"}'
 ```
 
 ## Library Usage
@@ -122,25 +132,6 @@ const app = createApp();
 app.listen(8080);
 ```
 
-## Release Verification
-
-`v1.1.0` was verified on April 21, 2026 after publishing `@sunflower0305/claude-proxy` to npm.
-
-Verified items:
-
-- `npm view @sunflower0305/claude-proxy version dist-tags --json` confirmed `version: 1.1.0` and `latest: 1.1.0`
-- `npm install @sunflower0305/claude-proxy` completed successfully in a clean temporary directory
-- the published `claude-proxy` CLI started correctly from the installed package
-- `GET /health` and `GET /v1/models` returned `200 OK`
-- local end-to-end proxying against a mock Anthropic-compatible upstream passed for both non-streaming and streaming `POST /v1/messages`
-
-Observed behavior during verification:
-
-- smoke-test startup succeeded with `PROVIDER=qwen`
-- the published artifact returned the expected `health` payload with `provider: qwen` and `model: qwen-plus`
-- the published artifact returned the expected Claude-facing model list from `GET /v1/models`
-- the published package included the expected CLI entrypoint, `dist/` build output, `README.md`, `LICENSE`, and `.env.example`
-
 ## Development
 
 From source:
@@ -149,50 +140,6 @@ From source:
 npm install
 npm run dev
 ```
-
-## CI And Releases
-
-GitHub Actions provides separate CI and CD workflows:
-
-- `CI` runs on branch pushes and pull requests
-- `CD` runs when you push a `vX.Y.Z` tag and can also be re-run manually with `workflow_dispatch`
-
-The `CD` workflow:
-
-- checks that the tag exactly matches `package.json.version`
-- requires `docs/releases/<version>.md` to exist before publishing
-- runs `npm run build`, `npm run test:proxy-local`, `npm run test:coverage`, and `npm pack --dry-run`
-- fails fast if the npm version already exists
-- publishes the package to npm using the `NPM_TOKEN` repository secret
-- creates or updates the GitHub Release from `docs/releases/<version>.md`
-
-Required repository secret:
-
-- `NPM_TOKEN`: npm automation token with permission to publish `@sunflower0305/claude-proxy`
-
-Release flow:
-
-1. bump `package.json`, `CHANGELOG.md`, and `docs/releases/<version>.md`
-2. commit the release prep
-3. create and push the matching `vX.Y.Z` tag
-4. let the `CD` workflow publish npm and GitHub Release
-
-The package still relies on `prepack` and `prepublishOnly` in `package.json` to build and verify the artifact before release.
-
-Build and local package verification:
-
-```bash
-npm run build
-env npm_config_cache=/tmp/claude-proxy-npm-cache npm pack --dry-run
-```
-
-Local integration test:
-
-```bash
-npm run test:proxy-local
-```
-
-Release notes for `v1.1.0` are available in [docs/releases/1.1.0.md](docs/releases/1.1.0.md).
 
 ## License
 

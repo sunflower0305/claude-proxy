@@ -5,7 +5,7 @@
 [![Coverage Status](https://coveralls.io/repos/github/sunflower0305/claude-proxy/badge.svg?branch=master)](https://coveralls.io/github/sunflower0305/claude-proxy?branch=master)
 [![npm version](https://img.shields.io/npm/v/%40sunflower0305%2Fclaude-proxy)](https://www.npmjs.com/package/@sunflower0305/claude-proxy)
 [![npm downloads](https://img.shields.io/npm/dm/%40sunflower0305%2Fclaude-proxy)](https://www.npmjs.com/package/@sunflower0305/claude-proxy)
-[![GitHub stars](https://img.shields.io/github/stars/sunflower0305/claude-proxy)](https://github.com/sunflower0305/claude-proxy/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/sunflower0305/claude-proxy?style=flat&cacheSeconds=60)](https://github.com/sunflower0305/claude-proxy/stargazers)
 [![License](https://img.shields.io/github/license/sunflower0305/claude-proxy)](https://github.com/sunflower0305/claude-proxy/blob/master/LICENSE)
 
 `claude-proxy` is published on npm as `@sunflower0305/claude-proxy`. It is a lightweight Express proxy that lets Claude Code or the Claude Agent SDK talk to domestic Chinese LLM providers through Anthropic-compatible `/v1/messages` endpoints.

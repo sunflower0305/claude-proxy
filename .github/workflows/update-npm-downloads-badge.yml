@@ -42,3 +42,6 @@ jobs:
           git add .github/badges/npm-weekly-downloads.json
           git commit -m "chore: update npm downloads badge [skip ci]"
           git push origin HEAD:master
+
+      - name: Purge jsDelivr badge cache
+        run: curl -fsS "https://purge.jsdelivr.net/gh/sunflower0305/claude-proxy@master/.github/badges/npm-weekly-downloads.json"

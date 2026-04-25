@@ -54,15 +54,11 @@ async function main() {
     label: "downloads",
     message: `${data.downloads}/week`,
     color: "brightgreen",
-    downloads: data.downloads,
-    start: data.start ?? start,
-    end: data.end ?? end,
-    package: data.package ?? packageName,
   };
 
   await mkdir(new URL(".", outputUrl), { recursive: true });
   await writeFile(outputUrl, `${JSON.stringify(badge, null, 2)}\n`);
-  console.log(`Updated npm weekly downloads badge: ${badge.message} (${badge.start}:${badge.end})`);
+  console.log(`Updated npm weekly downloads badge: ${badge.message} (${data.start ?? start}:${data.end ?? end})`);
 }
 
 await main();

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "label": "downloads",
+  "message": "531/week",
+  "color": "brightgreen",
+  "downloads": 531,
+  "start": "2026-04-18",
+  "end": "2026-04-24",
+  "package": "@sunflower0305/claude-proxy"
+}

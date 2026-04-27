@@ -62,13 +62,11 @@
     "report:provider-cli-e2e": "node --experimental-strip-types tests/integration/report-provider-cli-e2e.ts"
   },
   "dependencies": {
-    "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.0"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^3.2.4",
-    "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^22.0.0",
     "tsx": "^4.19.0",

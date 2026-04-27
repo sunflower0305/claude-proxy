@@ -11,7 +11,6 @@
  */
 
 import "dotenv/config";
-import cors from "cors";
 import express from "express";
 import { realpathSync } from "node:fs";
 import { Readable } from "node:stream";
@@ -401,7 +400,6 @@ export function createApp(): express.Express {
 
   const app = express();
 
-  app.use(cors());
   app.use(express.json({ limit: "50mb" }));
 
   app.get("/", (_req, res) => {

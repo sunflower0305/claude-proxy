@@ -492,6 +492,15 @@ describe.sequential("proxy local integration", () => {
     });
   });
 
+  it("does not enable CORS for browser origins by default", async () => {
+    const response = await fetch(`${harness.proxyBaseUrl}/health`, {
+      headers: { origin: "https://example.com" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
   it.each([
     { provider: undefined, label: "missing" },
     { provider: "not-a-provider", label: "invalid" },

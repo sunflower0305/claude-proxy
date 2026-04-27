@@ -1,5 +1,3 @@
-import "dotenv/config";
-
 export type TestMode = "non-stream" | "stream";
 
 export interface AnthropicCompatibilityCase {

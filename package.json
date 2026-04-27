@@ -23,7 +23,7 @@
     ".env.example"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=20.12"
   },
   "publishConfig": {
     "access": "public"
@@ -63,7 +63,6 @@
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
     "express": "^4.21.0"
   },
   "devDependencies": {

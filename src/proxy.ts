@@ -10,11 +10,13 @@
  *   export ANTHROPIC_API_KEY=any-key-works
  */
 
-import "dotenv/config";
 import express from "express";
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
+import { loadEnvFile } from "node:process";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
+
+if (!Reflect.has(globalThis, "__claudeProxyLocalEnvLoaded")) Reflect.set(globalThis, "__claudeProxyLocalEnvLoaded", true) && existsSync(".env") && loadEnvFile(".env");
 
 const DEFAULT_ANTHROPIC_VERSION = "2023-06-01";
 const HOP_BY_HOP_RESPONSE_HEADERS = new Set([

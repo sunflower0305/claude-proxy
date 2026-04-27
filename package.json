@@ -23,7 +23,7 @@
     ".env.example"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=20.12"
   },
   "publishConfig": {
     "access": "public"
@@ -62,7 +62,6 @@
     "report:provider-cli-e2e": "node --experimental-strip-types tests/integration/report-provider-cli-e2e.ts"
   },
   "dependencies": {
-    "dotenv": "^16.4.5",
     "express": "^4.21.0"
   },
   "devDependencies": {

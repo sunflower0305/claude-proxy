@@ -8,6 +8,7 @@
  * Usage:
  *   export ANTHROPIC_BASE_URL=http://localhost:8080
  *   export ANTHROPIC_API_KEY=any-key-works
+ *   # If PROXY_API_KEY is set, use that same value instead.
  */
 
 import express from "express";
@@ -172,6 +173,21 @@ function createProxyError(message: string) {
   };
 }
 
+function createAuthenticationError() {
+  return {
+    type: "error",
+    error: {
+      type: "authentication_error",
+      message: "Invalid API key",
+    },
+  };
+}
+
+function getBearerToken(authorization: string | undefined): string | undefined {
+  const match = authorization?.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || undefined;
+}
+
 function inferProviderFromModel(
   model: string | undefined
 ): ProviderKey | undefined {
@@ -213,6 +229,7 @@ function logTimingEvent(
 export function createApp(): express.Express {
   let currentProvider = getInitialProvider();
   let requestSequence = 0;
+  const proxyApiKey = pickEnv("PROXY_API_KEY");
 
   function getConfig(provider: ProviderKey = currentProvider): ProviderConfig {
     return getProviderConfig(provider);
@@ -257,6 +274,29 @@ export function createApp(): express.Express {
       stream,
       startedAt: Date.now(),
     };
+  }
+
+  function requireProxyApiKey(
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) {
+    if (!proxyApiKey) {
+      next();
+      return;
+    }
+
+    const clientTokens = [
+      getHeaderValue(req.headers["x-api-key"])?.trim(),
+      getBearerToken(getHeaderValue(req.headers.authorization)),
+    ].filter((token): token is string => Boolean(token));
+
+    if (clientTokens.includes(proxyApiKey)) {
+      next();
+      return;
+    }
+
+    res.status(401).json(createAuthenticationError());
   }
 
   async function handleNonStreamingRequest(
@@ -422,7 +462,7 @@ export function createApp(): express.Express {
     });
   });
 
-  app.post("/v1/messages", async (req, res) => {
+  app.post("/v1/messages", requireProxyApiKey, async (req, res) => {
     if (req.body?.stream) {
       await handleStreamingRequest(req, res);
       return;
@@ -456,7 +496,7 @@ export function createApp(): express.Express {
     });
   });
 
-  app.post("/api/provider", (req, res) => {
+  app.post("/api/provider", requireProxyApiKey, (req, res) => {
     const { provider, model } = (req.body ?? {}) as {
       provider?: string;
       model?: string;
@@ -515,6 +555,9 @@ function isMainModule() {
 if (isMainModule()) {
   const initialProvider = getInitialProvider();
   const initialConfig = getProviderConfig(initialProvider);
+  const clientApiKeyHint = pickEnv("PROXY_API_KEY")
+    ? "same value as PROXY_API_KEY"
+    : "any-string-works";
 
   if (!initialConfig.apiKey) {
     console.warn(
@@ -536,7 +579,7 @@ if (isMainModule()) {
 ╠═══════════════════════════════════════════════════════╣
 ║  Set these env vars in your app:                      ║
 ║  ANTHROPIC_BASE_URL=http://localhost:${PORT}
-║  ANTHROPIC_API_KEY=any-string-works                   ║
+║  ANTHROPIC_API_KEY=${clientApiKeyHint}
 ╚═══════════════════════════════════════════════════════╝
   `);
   });

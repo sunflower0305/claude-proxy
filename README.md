@@ -38,6 +38,8 @@ Example `.env`:
 ```dotenv
 PROVIDER=deepseek
 PROXY_PORT=8080
+# Optional: require clients to send this token to write endpoints.
+# PROXY_API_KEY=your-local-proxy-token
 DEEPSEEK_API_KEY=your-deepseek-api-key
 DEEPSEEK_MODEL=deepseek-v4-pro
 ```
@@ -48,6 +50,7 @@ Available variables:
 | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | `PROVIDER`                                                                                                                                  | Active provider. Defaults to `deepseek`.                            |
 | `PROXY_PORT`                                                                                                                                | Local server port. Defaults to `8080`.                              |
+| `PROXY_API_KEY`                                                                                                                             | Optional local proxy token for `POST /v1/messages` and `POST /api/provider`. |
 | `QWEN_API_KEY`                                                                                                                              | API key for Qwen.                                                   |
 | `DEEPSEEK_API_KEY`                                                                                                                          | API key for DeepSeek.                                               |
 | `GLM_API_KEY`                                                                                                                               | API key for GLM.                                                    |
@@ -89,6 +92,11 @@ export ANTHROPIC_BASE_URL=http://localhost:8080
 export ANTHROPIC_API_KEY=any-string-works
 ```
 
+If you set `PROXY_API_KEY`, set the client `ANTHROPIC_API_KEY` to the same
+value. The proxy accepts it through either `x-api-key` or
+`Authorization: Bearer`. If `PROXY_API_KEY` is not set, the local proxy does not
+validate the client API key and any non-empty string can be used.
+
 Example SDK usage:
 
 ```ts
@@ -96,7 +104,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const client = new Anthropic({
   baseURL: "http://localhost:8080",
-  apiKey: "any-string",
+  apiKey: process.env.PROXY_API_KEY || "any-string",
 });
 ```
 

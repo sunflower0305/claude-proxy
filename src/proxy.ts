@@ -99,7 +99,9 @@ function isProviderKey(value: string | undefined): value is ProviderKey {
 }
 
 function getInitialProvider(): ProviderKey {
-  return isProviderKey(process.env.PROVIDER) ? process.env.PROVIDER : "deepseek";
+  return isProviderKey(process.env.PROVIDER)
+    ? process.env.PROVIDER
+    : "deepseek";
 }
 
 function getProviderConfig(provider: ProviderKey): ProviderConfig {
@@ -402,7 +404,7 @@ export function createApp(): express.Express {
 
   const app = express();
 
-  app.use(express.json({ limit: "50mb" }));
+  app.use(express.json({ limit: "32mb" }));
 
   app.get("/", (_req, res) => {
     const config = getConfig();

@@ -14,6 +14,8 @@ It currently supports `qwen`, `deepseek`, `glm`, `minimax`, and `kimi`.
 
 ## Install
 
+Requires Node.js 20.12 or newer.
+
 Run without installing:
 
 ```bash
@@ -29,7 +31,7 @@ claude-proxy
 
 ## Configure
 
-The proxy reads configuration from environment variables. You can export them in your shell or create a `.env` file in the directory where you run `claude-proxy`.
+The proxy reads configuration from environment variables. You can export them in your shell or create a `.env` file in the directory where you run `claude-proxy`; `.env` loading uses Node.js built-in `.env` file support.
 
 Example `.env`:
 

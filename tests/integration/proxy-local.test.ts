@@ -4,6 +4,9 @@ import http, {
   type ServerResponse,
 } from "node:http";
 import { once } from "node:events";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 interface RecordedRequest {
@@ -361,8 +364,10 @@ async function createHarness(envOverrides: EnvOverrides = {}): Promise<TestHarne
     ...envOverrides,
   };
 
+  // Empty strings keep local .env files from refilling variables that a test
+  // intentionally models as absent; pickEnv treats trimmed empty strings as missing.
   for (const key of testEnvKeys) {
-    setEnv(key, envValues[key]);
+    setEnv(key, envValues[key] ?? "");
   }
 
   vi.resetModules();
@@ -492,6 +497,15 @@ describe.sequential("proxy local integration", () => {
     });
   });
 
+  it("does not enable CORS for browser origins by default", async () => {
+    const response = await fetch(`${harness.proxyBaseUrl}/health`, {
+      headers: { origin: "https://example.com" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
   it.each([
     { provider: undefined, label: "missing" },
     { provider: "not-a-provider", label: "invalid" },
@@ -539,6 +553,98 @@ describe.sequential("proxy local integration", () => {
       baseUrl: "https://api.deepseek.com/anthropic",
       availableProviders,
     });
+  });
+
+  it("loads .env from the current working directory without overriding existing env", async () => {
+    await cleanupHarness?.close();
+    cleanupHarness = undefined;
+
+    const originalCwd = process.cwd();
+    const tempDir = await mkdtemp(path.join(tmpdir(), "claude-proxy-env-"));
+    const envBackup = Object.fromEntries(
+      testEnvKeys.map((key) => [key, process.env[key]])
+    ) as Record<TestEnvKey, string | undefined>;
+    const recordedRequests: RecordedRequest[] = [];
+    let proxy: Server | undefined;
+    let upstream: Server | undefined;
+
+    try {
+      upstream = http.createServer(async (req, res) => {
+        const body = await readJsonBody(req);
+        recordedRequests.push({ headers: req.headers, body });
+        writeJson(res, 200, {
+          id: "msg_upstream",
+          type: "message",
+          role: "assistant",
+          model: body.model,
+          content: [{ type: "text", text: "OK" }],
+          stop_reason: "end_turn",
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 1 },
+        });
+      });
+      const upstreamPort = await startServer(upstream);
+
+      for (const key of testEnvKeys) {
+        setEnv(key, undefined);
+      }
+      process.env.DEEPSEEK_API_KEY = "existing-secret";
+
+      await writeFile(
+        path.join(tempDir, ".env"),
+        [
+          "PROVIDER=deepseek",
+          "DEEPSEEK_API_KEY=file-secret",
+          "DEEPSEEK_MODEL=env-file-model",
+          `DEEPSEEK_ANTHROPIC_BASE_URL=http://127.0.0.1:${upstreamPort}`,
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+
+      process.chdir(tempDir);
+      vi.resetModules();
+      const { createApp } = await import("../../src/proxy.ts");
+      const startedProxy = await startProxyServer(createApp);
+      proxy = startedProxy.proxy;
+
+      const providerResponse = await fetch(
+        `${startedProxy.proxyBaseUrl}/api/provider`
+      );
+      expect(providerResponse.status).toBe(200);
+      await expect(providerResponse.json()).resolves.toEqual({
+        provider: "deepseek",
+        model: "env-file-model",
+        baseUrl: `http://127.0.0.1:${upstreamPort}`,
+        availableProviders,
+      });
+
+      const messageResponse = await fetch(
+        `${startedProxy.proxyBaseUrl}/v1/messages`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-api-key": "client-placeholder",
+          },
+          body: JSON.stringify(buildRequestPayload()),
+        }
+      );
+
+      expect(messageResponse.status).toBe(200);
+      expect(recordedRequests.at(-1)?.headers["x-api-key"]).toBe(
+        "existing-secret"
+      );
+    } finally {
+      if (proxy) await closeServer(proxy);
+      if (upstream) await closeServer(upstream);
+      process.chdir(originalCwd);
+      for (const key of testEnvKeys) {
+        setEnv(key, envBackup[key]);
+      }
+      await rm(tempDir, { recursive: true, force: true });
+      vi.resetModules();
+    }
   });
 
   it("imports as a library when the process entrypoint is missing or invalid", async () => {

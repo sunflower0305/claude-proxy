@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-05-01
+
+Minor release of `@sunflower0305/claude-proxy`.
+
+### Changed
+
+- `.env` loading now uses Node.js built-in `.env` file support instead of the external `dotenv` package
+- minimum supported Node.js version is now 20.12
+- CORS is no longer enabled by default
+
+### Removed
+
+- removed runtime dependency on `dotenv`
+- removed unused `cors` and `@types/cors` dependencies
+
+Detailed release notes: [docs/releases/1.2.0.md](docs/releases/1.2.0.md)
+
 ## [1.1.3] - 2026-04-24
 
 Patch release of `@sunflower0305/claude-proxy`.

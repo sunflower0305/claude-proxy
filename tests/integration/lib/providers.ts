@@ -1,4 +1,7 @@
-import "dotenv/config";
+import { existsSync } from "node:fs";
+import { loadEnvFile } from "node:process";
+
+if (existsSync(".env")) loadEnvFile(".env");
 
 export type ProviderKey = "deepseek" | "qwen" | "glm" | "minimax" | "kimi";
 

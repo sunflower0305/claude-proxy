@@ -1,6 +1,6 @@
 {
   "name": "@sunflower0305/claude-proxy",
-  "version": "1.1.3",
+  "version": "1.2.0",
   "type": "module",
   "description": "A proxy that lets Claude Agent SDK use domestic Chinese LLMs (DeepSeek, Qwen, GLM, MiniMax) as backend",
   "license": "MIT",
@@ -23,7 +23,7 @@
     ".env.example"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=20.12"
   },
   "publishConfig": {
     "access": "public"
@@ -55,20 +55,17 @@
     "prepack": "npm run build",
     "prepublishOnly": "npm run test:proxy-local",
     "test": "vitest run",
-    "test:coverage": "vitest run tests/integration/proxy-local.test.ts --coverage --coverage.reporter=lcov --coverage.reporter=text --pool threads",
+    "test:coverage": "vitest run tests/integration/proxy-local.test.ts --coverage --coverage.reporter=lcov --coverage.reporter=text --pool forks",
     "test:proxy-local": "vitest run tests/integration/proxy-local.test.ts",
     "test:provider-anthropic": "node --experimental-strip-types tests/integration/provider-anthropic.ts",
     "test:provider-cli-e2e": "node --experimental-strip-types tests/integration/provider-cli-e2e.ts",
     "report:provider-cli-e2e": "node --experimental-strip-types tests/integration/report-provider-cli-e2e.ts"
   },
   "dependencies": {
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
     "express": "^4.21.0"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^3.2.4",
-    "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^22.0.0",
     "tsx": "^4.19.0",

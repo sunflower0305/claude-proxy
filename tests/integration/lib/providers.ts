@@ -1,10 +1,18 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { loadEnvFile } from "node:process";
 
-const localEnvLoadedKey = "__claudeProxyLocalEnvLoaded";
-if (!Reflect.has(globalThis, localEnvLoadedKey)) {
-  Reflect.set(globalThis, localEnvLoadedKey, true);
-  if (existsSync(".env")) loadEnvFile(".env");
+const loadedLocalEnvPathsKey = "__claudeProxyLoadedLocalEnvPaths";
+if (existsSync(".env")) {
+  const loadedLocalEnvPaths =
+    (Reflect.get(globalThis, loadedLocalEnvPathsKey) as Set<string> | undefined) ??
+    new Set<string>();
+  Reflect.set(globalThis, loadedLocalEnvPathsKey, loadedLocalEnvPaths);
+
+  const localEnvPath = realpathSync(".env");
+  if (!loadedLocalEnvPaths.has(localEnvPath)) {
+    loadedLocalEnvPaths.add(localEnvPath);
+    loadEnvFile(".env");
+  }
 }
 
 export type ProviderKey = "deepseek" | "qwen" | "glm" | "minimax" | "kimi";

@@ -17,10 +17,18 @@ import { loadEnvFile } from "node:process";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
-const localEnvLoadedKey = "__claudeProxyLocalEnvLoaded";
-if (!Reflect.has(globalThis, localEnvLoadedKey)) {
-  Reflect.set(globalThis, localEnvLoadedKey, true);
-  if (existsSync(".env")) loadEnvFile(".env");
+const loadedLocalEnvPathsKey = "__claudeProxyLoadedLocalEnvPaths";
+if (existsSync(".env")) {
+  const loadedLocalEnvPaths =
+    (Reflect.get(globalThis, loadedLocalEnvPathsKey) as Set<string> | undefined) ??
+    new Set<string>();
+  Reflect.set(globalThis, loadedLocalEnvPathsKey, loadedLocalEnvPaths);
+
+  const localEnvPath = realpathSync(".env");
+  if (!loadedLocalEnvPaths.has(localEnvPath)) {
+    loadedLocalEnvPaths.add(localEnvPath);
+    loadEnvFile(".env");
+  }
 }
 
 const DEFAULT_ANTHROPIC_VERSION = "2023-06-01";

@@ -91,6 +91,13 @@ const PROVIDERS = {
     apiKey: process.env.KIMI_API_KEY || "",
     model: pickEnv("KIMI_MODEL") || "kimi-k2.6",
   },
+  mimo: {
+    baseUrl:
+      pickEnv("MIMO_ANTHROPIC_BASE_URL") ||
+      "https://api.xiaomimimo.com/anthropic",
+    apiKey: process.env.MIMO_API_KEY || "",
+    model: pickEnv("MIMO_MODEL") || "mimo-v2.5-pro",
+  },
 } satisfies Record<string, ProviderConfig>;
 
 type ProviderKey = keyof typeof PROVIDERS;

@@ -38,12 +38,14 @@ const qwenUpstreamModel = "qwen-plus-native";
 const glmUpstreamModel = "glm-5-native";
 const kimiUpstreamModel = "kimi-k2.5-native";
 const minimaxUpstreamModel = "minimax-m2-native";
+const mimoUpstreamModel = "mimo-v2.5-pro-native";
 const providerCases = [
   { provider: "deepseek", expectedModel: upstreamModel },
   { provider: "qwen", expectedModel: qwenUpstreamModel },
   { provider: "glm", expectedModel: glmUpstreamModel },
   { provider: "minimax", expectedModel: minimaxUpstreamModel },
   { provider: "kimi", expectedModel: kimiUpstreamModel },
+  { provider: "mimo", expectedModel: mimoUpstreamModel },
 ] as const;
 const streamingProviderCases = providerCases.filter(
   ({ provider }) => provider === "deepseek" || provider === "kimi"
@@ -69,6 +71,11 @@ const providerInferenceCases = [
     expectedProvider: "minimax",
     expectedModel: minimaxUpstreamModel,
   },
+  {
+    model: "mimo-v2.5-pro",
+    expectedProvider: "mimo",
+    expectedModel: mimoUpstreamModel,
+  },
 ] as const;
 const availableProviders = providerCases.map(({ provider }) => provider);
 const testEnvKeys = [
@@ -88,6 +95,9 @@ const testEnvKeys = [
   "KIMI_API_KEY",
   "KIMI_MODEL",
   "KIMI_ANTHROPIC_BASE_URL",
+  "MIMO_API_KEY",
+  "MIMO_MODEL",
+  "MIMO_ANTHROPIC_BASE_URL",
   "PROXY_PORT",
   "PROXY_API_KEY",
 ] as const;
@@ -361,6 +371,9 @@ async function createHarness(envOverrides: EnvOverrides = {}): Promise<TestHarne
     KIMI_API_KEY: upstreamApiKey,
     KIMI_MODEL: kimiUpstreamModel,
     KIMI_ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+    MIMO_API_KEY: upstreamApiKey,
+    MIMO_MODEL: mimoUpstreamModel,
+    MIMO_ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
     PROXY_PORT: undefined,
     PROXY_API_KEY: undefined,
     ...envOverrides,
@@ -1350,6 +1363,9 @@ describe.sequential("proxy local integration", () => {
       KIMI_API_KEY: upstreamApiKey,
       KIMI_MODEL: kimiUpstreamModel,
       KIMI_ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      MIMO_API_KEY: upstreamApiKey,
+      MIMO_MODEL: mimoUpstreamModel,
+      MIMO_ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
       PROXY_PORT: undefined,
       PROXY_API_KEY: undefined,
     };

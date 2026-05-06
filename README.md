@@ -10,7 +10,7 @@
 
 `claude-proxy` is published on npm as `@sunflower0305/claude-proxy`. It is a lightweight Express proxy that lets Claude Code or the Claude Agent SDK talk to domestic Chinese LLM providers through Anthropic-compatible `/v1/messages` endpoints.
 
-It currently supports `qwen`, `deepseek`, `glm`, `minimax`, and `kimi`.
+It currently supports `qwen`, `deepseek`, `glm`, `minimax`, `kimi`, and `mimo`.
 
 ## Install
 
@@ -56,8 +56,9 @@ Available variables:
 | `GLM_API_KEY`                                                                                                                               | API key for GLM.                                                    |
 | `MINIMAX_API_KEY`                                                                                                                           | API key for MiniMax.                                                |
 | `KIMI_API_KEY`                                                                                                                              | API key for Kimi.                                                   |
-| `QWEN_ANTHROPIC_BASE_URL`, `DEEPSEEK_ANTHROPIC_BASE_URL`, `GLM_ANTHROPIC_BASE_URL`, `MINIMAX_ANTHROPIC_BASE_URL`, `KIMI_ANTHROPIC_BASE_URL` | Override the upstream Anthropic-compatible base URL for a provider. |
-| `QWEN_MODEL`, `DEEPSEEK_MODEL`, `GLM_MODEL`, `MINIMAX_MODEL`, `KIMI_MODEL`                                                                  | Override the default upstream model for a provider.                 |
+| `MIMO_API_KEY`                                                                                                                              | API key for MIMO.                                                   |
+| `QWEN_ANTHROPIC_BASE_URL`, `DEEPSEEK_ANTHROPIC_BASE_URL`, `GLM_ANTHROPIC_BASE_URL`, `MINIMAX_ANTHROPIC_BASE_URL`, `KIMI_ANTHROPIC_BASE_URL`, `MIMO_ANTHROPIC_BASE_URL` | Override the upstream Anthropic-compatible base URL for a provider. |
+| `QWEN_MODEL`, `DEEPSEEK_MODEL`, `GLM_MODEL`, `MINIMAX_MODEL`, `KIMI_MODEL`, `MIMO_MODEL`                                                    | Override the default upstream model for a provider.                 |
 
 Provider defaults:
 
@@ -68,6 +69,7 @@ Provider defaults:
 | `glm` | `GLM_MODEL` | `glm-5.1` |
 | `minimax` | `MINIMAX_MODEL` | `MiniMax-M2.7-highspeed` |
 | `kimi` | `KIMI_MODEL` | `kimi-k2.6` |
+| `mimo` | `MIMO_MODEL` | `mimo-v2.5-pro` |
 
 You can use the bundled example as a starting point:
 

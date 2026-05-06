@@ -3,7 +3,13 @@ import { loadEnvFile } from "node:process";
 
 if (existsSync(".env")) loadEnvFile(".env");
 
-export type ProviderKey = "deepseek" | "qwen" | "glm" | "minimax" | "kimi";
+export type ProviderKey =
+  | "deepseek"
+  | "qwen"
+  | "glm"
+  | "minimax"
+  | "kimi"
+  | "mimo";
 
 export interface ProviderDefinition {
   key: ProviderKey;
@@ -73,6 +79,16 @@ export function getProviderDefinitions(): ProviderDefinition[] {
         pickEnv("KIMI_ANTHROPIC_BASE_URL") ||
         "https://api.moonshot.cn/anthropic",
       model: pickEnv("KIMI_MODEL") || "kimi-k2.5",
+    },
+    {
+      key: "mimo",
+      name: "MIMO",
+      apiKeyEnv: ["MIMO_API_KEY"],
+      apiKey: pickEnv("MIMO_API_KEY"),
+      baseUrl:
+        pickEnv("MIMO_ANTHROPIC_BASE_URL") ||
+        "https://api.xiaomimimo.com/anthropic",
+      model: pickEnv("MIMO_MODEL") || "mimo-v2.5-pro",
     },
   ];
 }

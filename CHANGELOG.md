@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-05-06
+
+Minor release of `@sunflower0305/claude-proxy`.
+
+### Added
+
+- Anthropic-compatible proxy support for MIMO through the `mimo` provider
+- `MIMO_API_KEY`, `MIMO_MODEL`, and `MIMO_ANTHROPIC_BASE_URL` configuration
+- local integration coverage for MIMO provider switching, model mapping, and non-streaming request proxying
+
+Detailed release notes: [docs/releases/1.3.0.md](docs/releases/1.3.0.md)
+
 ## [1.2.0] - 2026-05-01
 
 Minor release of `@sunflower0305/claude-proxy`.

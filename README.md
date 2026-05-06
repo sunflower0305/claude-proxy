@@ -46,30 +46,30 @@ DEEPSEEK_MODEL=deepseek-v4-pro
 
 Available variables:
 
-| Variable                                                                                                                                    | Purpose                                                             |
-| ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `PROVIDER`                                                                                                                                  | Active provider. Defaults to `deepseek`.                            |
-| `PROXY_PORT`                                                                                                                                | Local server port. Defaults to `8080`.                              |
-| `PROXY_API_KEY`                                                                                                                             | Optional local proxy token for `POST /v1/messages` and `POST /api/provider`. |
-| `QWEN_API_KEY`                                                                                                                              | API key for Qwen.                                                   |
-| `DEEPSEEK_API_KEY`                                                                                                                          | API key for DeepSeek.                                               |
-| `GLM_API_KEY`                                                                                                                               | API key for GLM.                                                    |
-| `MINIMAX_API_KEY`                                                                                                                           | API key for MiniMax.                                                |
-| `KIMI_API_KEY`                                                                                                                              | API key for Kimi.                                                   |
-| `MIMO_API_KEY`                                                                                                                              | API key for MIMO.                                                   |
-| `QWEN_ANTHROPIC_BASE_URL`, `DEEPSEEK_ANTHROPIC_BASE_URL`, `GLM_ANTHROPIC_BASE_URL`, `MINIMAX_ANTHROPIC_BASE_URL`, `KIMI_ANTHROPIC_BASE_URL`, `MIMO_ANTHROPIC_BASE_URL` | Override the upstream Anthropic-compatible base URL for a provider. |
-| `QWEN_MODEL`, `DEEPSEEK_MODEL`, `GLM_MODEL`, `MINIMAX_MODEL`, `KIMI_MODEL`, `MIMO_MODEL`                                                    | Override the default upstream model for a provider.                 |
+| Variable                                                                                                                                                               | Purpose                                                                      |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `PROVIDER`                                                                                                                                                             | Active provider. Defaults to `deepseek`.                                     |
+| `PROXY_PORT`                                                                                                                                                           | Local server port. Defaults to `8080`.                                       |
+| `PROXY_API_KEY`                                                                                                                                                        | Optional local proxy token for `POST /v1/messages` and `POST /api/provider`. |
+| `QWEN_API_KEY`                                                                                                                                                         | API key for Qwen.                                                            |
+| `DEEPSEEK_API_KEY`                                                                                                                                                     | API key for DeepSeek.                                                        |
+| `GLM_API_KEY`                                                                                                                                                          | API key for GLM.                                                             |
+| `MINIMAX_API_KEY`                                                                                                                                                      | API key for MiniMax.                                                         |
+| `KIMI_API_KEY`                                                                                                                                                         | API key for Kimi.                                                            |
+| `MIMO_API_KEY`                                                                                                                                                         | API key for MIMO.                                                            |
+| `QWEN_ANTHROPIC_BASE_URL`, `DEEPSEEK_ANTHROPIC_BASE_URL`, `GLM_ANTHROPIC_BASE_URL`, `MINIMAX_ANTHROPIC_BASE_URL`, `KIMI_ANTHROPIC_BASE_URL`, `MIMO_ANTHROPIC_BASE_URL` | Override the upstream Anthropic-compatible base URL for a provider.          |
+| `QWEN_MODEL`, `DEEPSEEK_MODEL`, `GLM_MODEL`, `MINIMAX_MODEL`, `KIMI_MODEL`, `MIMO_MODEL`                                                                               | Override the default upstream model for a provider.                          |
 
 Provider defaults:
 
-| Provider | Model env | Default model |
-| --- | --- | --- |
-| **`deepseek` (default)** | `DEEPSEEK_MODEL` | **`deepseek-v4-pro`** |
-| `qwen` | `QWEN_MODEL` | `qwen-plus` |
-| `glm` | `GLM_MODEL` | `glm-5.1` |
-| `minimax` | `MINIMAX_MODEL` | `MiniMax-M2.7-highspeed` |
-| `kimi` | `KIMI_MODEL` | `kimi-k2.6` |
-| `mimo` | `MIMO_MODEL` | `mimo-v2.5-pro` |
+| Provider                 | Model env        | Default model            |
+| ------------------------ | ---------------- | ------------------------ |
+| **`deepseek` (default)** | `DEEPSEEK_MODEL` | **`deepseek-v4-pro`**    |
+| `qwen`                   | `QWEN_MODEL`     | `qwen-plus`              |
+| `glm`                    | `GLM_MODEL`      | `glm-5.1`                |
+| `minimax`                | `MINIMAX_MODEL`  | `minimax-m2.7-highspeed` |
+| `kimi`                   | `KIMI_MODEL`     | `kimi-k2.6`              |
+| `mimo`                   | `MIMO_MODEL`     | `mimo-v2.5-pro`          |
 
 You can use the bundled example as a starting point:
 

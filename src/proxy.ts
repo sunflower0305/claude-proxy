@@ -83,7 +83,7 @@ const PROVIDERS = {
       pickEnv("MINIMAX_ANTHROPIC_BASE_URL") ||
       "https://api.minimaxi.com/anthropic",
     apiKey: process.env.MINIMAX_API_KEY || "",
-    model: pickEnv("MINIMAX_MODEL") || "MiniMax-M2.7-highspeed",
+    model: pickEnv("MINIMAX_MODEL") || "minimax-m2.7-highspeed",
   },
   kimi: {
     baseUrl:

@@ -4,6 +4,9 @@ import http, {
   type ServerResponse,
 } from "node:http";
 import { once } from "node:events";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 interface RecordedRequest {
@@ -86,6 +89,7 @@ const testEnvKeys = [
   "KIMI_MODEL",
   "KIMI_ANTHROPIC_BASE_URL",
   "PROXY_PORT",
+  "PROXY_API_KEY",
 ] as const;
 
 type ProviderCase = (typeof providerCases)[number];
@@ -358,11 +362,14 @@ async function createHarness(envOverrides: EnvOverrides = {}): Promise<TestHarne
     KIMI_MODEL: kimiUpstreamModel,
     KIMI_ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
     PROXY_PORT: undefined,
+    PROXY_API_KEY: undefined,
     ...envOverrides,
   };
 
+  // Empty strings keep local .env files from refilling variables that a test
+  // intentionally models as absent; pickEnv treats trimmed empty strings as missing.
   for (const key of testEnvKeys) {
-    setEnv(key, envValues[key]);
+    setEnv(key, envValues[key] ?? "");
   }
 
   vi.resetModules();
@@ -386,11 +393,16 @@ async function createHarness(envOverrides: EnvOverrides = {}): Promise<TestHarne
   };
 }
 
-async function switchProvider(baseUrl: string, provider: string) {
+async function switchProvider(
+  baseUrl: string,
+  provider: string,
+  headers: Record<string, string> = {}
+) {
   return fetch(`${baseUrl}/api/provider`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
+      ...headers,
     },
     body: JSON.stringify({ provider }),
   });
@@ -501,6 +513,129 @@ describe.sequential("proxy local integration", () => {
     expect(response.headers.get("access-control-allow-origin")).toBeNull();
   });
 
+  it("keeps message proxy auth disabled when PROXY_API_KEY is not set", async () => {
+    const response = await postMessages(
+      harness,
+      { metadata: { case: "success", trace_id: "auth-disabled" } },
+      { "x-api-key": "any-client-token" }
+    );
+
+    expect(response.status).toBe(200);
+    expect(harness.recordedRequests).toHaveLength(1);
+  });
+
+  it.each([
+    { label: "x-api-key", headers: { "x-api-key": "local-proxy-token" } },
+    {
+      label: "authorization bearer",
+      headers: { authorization: "Bearer local-proxy-token" },
+    },
+  ])("accepts message requests authorized with $label", async ({ headers }) => {
+    await cleanupHarness?.close();
+    harness = await createHarness({ PROXY_API_KEY: "local-proxy-token" });
+    cleanupHarness = harness;
+
+    const metadata = { case: "success", trace_id: "authorized-message" };
+    const response = await postMessages(harness, { metadata }, headers);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      model: upstreamModel,
+      metadata_echo: metadata,
+    });
+    expect(harness.recordedRequests).toHaveLength(1);
+  });
+
+  it.each([
+    { label: "missing", headers: {} },
+    { label: "invalid", headers: { "x-api-key": "wrong-token" } },
+  ])(
+    "rejects message requests with $label proxy token without forwarding upstream",
+    async ({ headers }) => {
+      await cleanupHarness?.close();
+      harness = await createHarness({ PROXY_API_KEY: "local-proxy-token" });
+      cleanupHarness = harness;
+
+      const response = await fetch(`${harness.proxyBaseUrl}/v1/messages`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...headers,
+        },
+        body: JSON.stringify(harness.requestPayload),
+      });
+
+      expect(response.status).toBe(401);
+      await expect(response.json()).resolves.toEqual({
+        type: "error",
+        error: {
+          type: "authentication_error",
+          message: "Invalid API key",
+        },
+      });
+      expect(harness.recordedRequests).toHaveLength(0);
+    }
+  );
+
+  it("rejects unauthorized provider switches without changing the provider", async () => {
+    await cleanupHarness?.close();
+    harness = await createHarness({ PROXY_API_KEY: "local-proxy-token" });
+    cleanupHarness = harness;
+
+    const response = await switchProvider(harness.proxyBaseUrl, "kimi");
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      type: "error",
+      error: {
+        type: "authentication_error",
+        message: "Invalid API key",
+      },
+    });
+
+    const currentProviderResponse = await fetch(
+      `${harness.proxyBaseUrl}/api/provider`
+    );
+    expect(currentProviderResponse.status).toBe(200);
+    expectProviderState(
+      await currentProviderResponse.json(),
+      "deepseek",
+      upstreamModel,
+      harness.upstreamPort
+    );
+  });
+
+  it("accepts provider switches authorized with the proxy token", async () => {
+    await cleanupHarness?.close();
+    harness = await createHarness({ PROXY_API_KEY: "local-proxy-token" });
+    cleanupHarness = harness;
+
+    const response = await switchProvider(harness.proxyBaseUrl, "kimi", {
+      "x-api-key": "local-proxy-token",
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      provider: "kimi",
+      model: kimiUpstreamModel,
+    });
+  });
+
+  it("leaves health and model listing public when proxy auth is enabled", async () => {
+    await cleanupHarness?.close();
+    harness = await createHarness({ PROXY_API_KEY: "local-proxy-token" });
+    cleanupHarness = harness;
+
+    const [healthResponse, modelsResponse] = await Promise.all([
+      fetch(`${harness.proxyBaseUrl}/health`),
+      fetch(`${harness.proxyBaseUrl}/v1/models`),
+    ]);
+
+    expect(healthResponse.status).toBe(200);
+    expect(modelsResponse.status).toBe(200);
+  });
+
   it.each([
     { provider: undefined, label: "missing" },
     { provider: "not-a-provider", label: "invalid" },
@@ -548,6 +683,98 @@ describe.sequential("proxy local integration", () => {
       baseUrl: "https://api.deepseek.com/anthropic",
       availableProviders,
     });
+  });
+
+  it("loads .env from the current working directory without overriding existing env", async () => {
+    await cleanupHarness?.close();
+    cleanupHarness = undefined;
+
+    const originalCwd = process.cwd();
+    const tempDir = await mkdtemp(path.join(tmpdir(), "claude-proxy-env-"));
+    const envBackup = Object.fromEntries(
+      testEnvKeys.map((key) => [key, process.env[key]])
+    ) as Record<TestEnvKey, string | undefined>;
+    const recordedRequests: RecordedRequest[] = [];
+    let proxy: Server | undefined;
+    let upstream: Server | undefined;
+
+    try {
+      upstream = http.createServer(async (req, res) => {
+        const body = await readJsonBody(req);
+        recordedRequests.push({ headers: req.headers, body });
+        writeJson(res, 200, {
+          id: "msg_upstream",
+          type: "message",
+          role: "assistant",
+          model: body.model,
+          content: [{ type: "text", text: "OK" }],
+          stop_reason: "end_turn",
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 1 },
+        });
+      });
+      const upstreamPort = await startServer(upstream);
+
+      for (const key of testEnvKeys) {
+        setEnv(key, undefined);
+      }
+      process.env.DEEPSEEK_API_KEY = "existing-secret";
+
+      await writeFile(
+        path.join(tempDir, ".env"),
+        [
+          "PROVIDER=deepseek",
+          "DEEPSEEK_API_KEY=file-secret",
+          "DEEPSEEK_MODEL=env-file-model",
+          `DEEPSEEK_ANTHROPIC_BASE_URL=http://127.0.0.1:${upstreamPort}`,
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+
+      process.chdir(tempDir);
+      vi.resetModules();
+      const { createApp } = await import("../../src/proxy.ts");
+      const startedProxy = await startProxyServer(createApp);
+      proxy = startedProxy.proxy;
+
+      const providerResponse = await fetch(
+        `${startedProxy.proxyBaseUrl}/api/provider`
+      );
+      expect(providerResponse.status).toBe(200);
+      await expect(providerResponse.json()).resolves.toEqual({
+        provider: "deepseek",
+        model: "env-file-model",
+        baseUrl: `http://127.0.0.1:${upstreamPort}`,
+        availableProviders,
+      });
+
+      const messageResponse = await fetch(
+        `${startedProxy.proxyBaseUrl}/v1/messages`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-api-key": "client-placeholder",
+          },
+          body: JSON.stringify(buildRequestPayload()),
+        }
+      );
+
+      expect(messageResponse.status).toBe(200);
+      expect(recordedRequests.at(-1)?.headers["x-api-key"]).toBe(
+        "existing-secret"
+      );
+    } finally {
+      if (proxy) await closeServer(proxy);
+      if (upstream) await closeServer(upstream);
+      process.chdir(originalCwd);
+      for (const key of testEnvKeys) {
+        setEnv(key, envBackup[key]);
+      }
+      await rm(tempDir, { recursive: true, force: true });
+      vi.resetModules();
+    }
   });
 
   it("imports as a library when the process entrypoint is missing or invalid", async () => {
@@ -1124,6 +1351,7 @@ describe.sequential("proxy local integration", () => {
       KIMI_MODEL: kimiUpstreamModel,
       KIMI_ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
       PROXY_PORT: undefined,
+      PROXY_API_KEY: undefined,
     };
 
     for (const key of testEnvKeys) {

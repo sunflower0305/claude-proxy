@@ -5,10 +5,7 @@ import net from "node:net";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 
-import {
-  getProviderDefinitions,
-  type ProviderDefinition,
-} from "./lib/providers.ts";
+import { getProviderDefinitions, type ProviderDefinition } from "./lib/providers.ts";
 
 const DEFAULT_PROXY_STARTUP_TIMEOUT_MS = 15_000;
 const DEFAULT_COMMAND_TIMEOUT_MS = 90_000;
@@ -75,10 +72,7 @@ function logSection(title: string) {
   console.log(`\n== ${title} ==`);
 }
 
-function getTimeoutFromEnv(
-  key: string,
-  fallback: number
-): number {
+function getTimeoutFromEnv(key: string, fallback: number): number {
   const value = process.env[key]?.trim();
   if (!value) return fallback;
 
@@ -116,17 +110,13 @@ function extractTiming(events: ProxyTimingEvent[]): ProviderTiming | undefined {
 
   if (!latestStart?.request_id) return undefined;
 
-  const relevant = events.filter(
-    (event) => event.request_id === latestStart.request_id
-  );
+  const relevant = events.filter((event) => event.request_id === latestStart.request_id);
 
   const findElapsed = (phase: string) =>
     relevant.find((event) => event.phase === phase)?.elapsed_ms;
   const terminal = [...relevant]
     .reverse()
-    .find((event) =>
-      ["completed", "client_aborted", "error"].includes(event.phase || "")
-    );
+    .find((event) => ["completed", "client_aborted", "error"].includes(event.phase || ""));
 
   return {
     proxyRequestId: latestStart.request_id,
@@ -155,12 +145,9 @@ function getArtifactRoot(cwd: string, runId: string) {
 
 function getProviderArtifactPaths(
   artifactRoot: string,
-  provider: ProviderDefinition
+  provider: ProviderDefinition,
 ): ProviderArtifactPaths {
-  const dir = path.join(
-    artifactRoot,
-    `${provider.key}-${sanitizeFileSegment(provider.model)}`
-  );
+  const dir = path.join(artifactRoot, `${provider.key}-${sanitizeFileSegment(provider.model)}`);
 
   return {
     dir,
@@ -190,7 +177,7 @@ async function writeProviderArtifacts(
     claudeStderr?: string;
     proxyStdout?: string;
     proxyStderr?: string;
-  }
+  },
 ) {
   await ensureDirectory(paths.dir);
 
@@ -199,14 +186,8 @@ async function writeProviderArtifacts(
     writeArtifactFile(paths.curlStderr, commandOutputs.curlStderr || ""),
     writeArtifactFile(paths.claudeStdout, commandOutputs.claudeStdout || ""),
     writeArtifactFile(paths.claudeStderr, commandOutputs.claudeStderr || ""),
-    writeArtifactFile(
-      path.join(paths.dir, "proxy.stdout.log"),
-      commandOutputs.proxyStdout || ""
-    ),
-    writeArtifactFile(
-      path.join(paths.dir, "proxy.stderr.log"),
-      commandOutputs.proxyStderr || ""
-    ),
+    writeArtifactFile(path.join(paths.dir, "proxy.stdout.log"), commandOutputs.proxyStdout || ""),
+    writeArtifactFile(path.join(paths.dir, "proxy.stderr.log"), commandOutputs.proxyStderr || ""),
     writeArtifactFile(paths.resultJson, JSON.stringify(result, null, 2)),
   ]);
 }
@@ -223,7 +204,7 @@ function printSummary(results: ProviderRunResult[]) {
     console.log(
       `[${result.outcome}] ${result.name} (${result.provider}, ${result.model}) - ${result.details}${
         result.logDir ? ` | logs: ${result.logDir}` : ""
-      }`
+      }`,
     );
   }
 
@@ -232,12 +213,10 @@ function printSummary(results: ProviderRunResult[]) {
       acc[result.outcome] += 1;
       return acc;
     },
-    { PASS: 0, FAIL: 0, SKIP: 0 }
+    { PASS: 0, FAIL: 0, SKIP: 0 },
   );
 
-  console.log(
-    `Totals: PASS=${counts.PASS} FAIL=${counts.FAIL} SKIP=${counts.SKIP}`
-  );
+  console.log(`Totals: PASS=${counts.PASS} FAIL=${counts.FAIL} SKIP=${counts.SKIP}`);
 }
 
 async function findFreePort() {
@@ -271,14 +250,11 @@ async function runCommand(
     cwd: string;
     env?: NodeJS.ProcessEnv;
     timeoutMs?: number;
-  }
+  },
 ): Promise<CommandResult> {
   const timeoutMs =
     options.timeoutMs ??
-    getTimeoutFromEnv(
-      "PROVIDER_CLI_E2E_COMMAND_TIMEOUT_MS",
-      DEFAULT_COMMAND_TIMEOUT_MS
-    );
+    getTimeoutFromEnv("PROVIDER_CLI_E2E_COMMAND_TIMEOUT_MS", DEFAULT_COMMAND_TIMEOUT_MS);
 
   return new Promise((resolve, reject) => {
     const startedAt = Date.now();
@@ -346,25 +322,19 @@ async function waitForHealth(baseUrl: string, timeoutMs: number) {
     await delay(250);
   }
 
-  throw new Error(
-    `Timed out waiting for proxy health after ${timeoutMs}ms: ${lastError}`
-  );
+  throw new Error(`Timed out waiting for proxy health after ${timeoutMs}ms: ${lastError}`);
 }
 
 async function startProxy(cwd: string): Promise<ProxyProcess> {
   const port = await findFreePort();
-  const child = spawn(
-    process.execPath,
-    ["--experimental-strip-types", "src/proxy.ts"],
-    {
-      cwd,
-      env: {
-        ...process.env,
-        PROXY_PORT: String(port),
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    }
-  );
+  const child = spawn(process.execPath, ["--experimental-strip-types", "src/proxy.ts"], {
+    cwd,
+    env: {
+      ...process.env,
+      PROXY_PORT: String(port),
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 
   let stdout = "";
   let stderr = "";
@@ -377,16 +347,13 @@ async function startProxy(cwd: string): Promise<ProxyProcess> {
   });
 
   try {
-    await waitForHealth(
-      `http://127.0.0.1:${port}`,
-      DEFAULT_PROXY_STARTUP_TIMEOUT_MS
-    );
+    await waitForHealth(`http://127.0.0.1:${port}`, DEFAULT_PROXY_STARTUP_TIMEOUT_MS);
   } catch (error) {
     child.kill("SIGTERM");
     throw new Error(
       `Failed to start proxy on port ${port}: ${
         error instanceof Error ? error.message : String(error)
-      }\nstdout:\n${stdout}\nstderr:\n${stderr}`
+      }\nstdout:\n${stdout}\nstderr:\n${stderr}`,
     );
   }
 
@@ -429,7 +396,7 @@ async function binaryExists(binary: string, cwd: string) {
 async function switchProvider(
   cwd: string,
   baseUrl: string,
-  provider: ProviderDefinition
+  provider: ProviderDefinition,
 ): Promise<CommandResult> {
   const response = await runCommand(
     "curl",
@@ -448,7 +415,7 @@ async function switchProvider(
     {
       cwd,
       env: process.env,
-    }
+    },
   );
 
   if (response.timedOut) {
@@ -457,7 +424,7 @@ async function switchProvider(
 
   if (response.exitCode !== 0) {
     throw new Error(
-      `curl exited with code ${response.exitCode}, stderr=${summarizeOutput(response.stderr)}`
+      `curl exited with code ${response.exitCode}, stderr=${summarizeOutput(response.stderr)}`,
     );
   }
 
@@ -479,23 +446,16 @@ async function switchProvider(
   return response;
 }
 
-async function askClaudeViaProxy(
-  cwd: string,
-  baseUrl: string
-): Promise<CommandResult> {
-  return runCommand(
-    "claude",
-    ["--bare", "-p", PROMPT],
-    {
-      cwd,
-      env: {
-        ...process.env,
-        ANTHROPIC_BASE_URL: baseUrl,
-        ANTHROPIC_API_KEY: "any-string-works",
-        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
-      },
-    }
-  );
+async function askClaudeViaProxy(cwd: string, baseUrl: string): Promise<CommandResult> {
+  return runCommand("claude", ["--bare", "-p", PROMPT], {
+    cwd,
+    env: {
+      ...process.env,
+      ANTHROPIC_BASE_URL: baseUrl,
+      ANTHROPIC_API_KEY: "any-string-works",
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+    },
+  });
 }
 
 async function runProviderCase(
@@ -503,7 +463,7 @@ async function runProviderCase(
   baseUrl: string,
   provider: ProviderDefinition,
   proxy: ProxyProcess,
-  artifactRoot: string
+  artifactRoot: string,
 ): Promise<ProviderRunResult> {
   const artifactPaths = getProviderArtifactPaths(artifactRoot, provider);
   const proxyStdoutBefore = proxy.stdout().length;
@@ -534,9 +494,7 @@ async function runProviderCase(
       provider: provider.key,
       model: provider.model,
       outcome: "FAIL",
-      details: `provider switch failed: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      details: `provider switch failed: ${error instanceof Error ? error.message : String(error)}`,
       logDir: artifactPaths.dir,
     } satisfies ProviderRunResult;
     await writeProviderArtifacts(artifactPaths, result, {
@@ -587,7 +545,7 @@ async function runProviderCase(
       model: provider.model,
       outcome: "FAIL",
       details: `claude timed out, stdout=${summarizeOutput(
-        commandResult.stdout
+        commandResult.stdout,
       )}, stderr=${summarizeOutput(commandResult.stderr)}`,
       timing: timing || {
         switchWallTimeMs: switchResult?.elapsedMs,
@@ -604,7 +562,7 @@ async function runProviderCase(
       details: `claude exited with code ${
         commandResult.exitCode
       }, stdout=${summarizeOutput(commandResult.stdout)}, stderr=${summarizeOutput(
-        commandResult.stderr
+        commandResult.stderr,
       )}`,
       timing: timing || {
         switchWallTimeMs: switchResult?.elapsedMs,
@@ -658,22 +616,13 @@ async function runProviderCase(
 async function writeRunSummary(
   artifactRoot: string,
   results: ProviderRunResult[],
-  proxy?: ProxyProcess
+  proxy?: ProxyProcess,
 ) {
   await ensureDirectory(artifactRoot);
   await Promise.all([
-    writeArtifactFile(
-      path.join(artifactRoot, "summary.json"),
-      JSON.stringify(results, null, 2)
-    ),
-    writeArtifactFile(
-      path.join(artifactRoot, "proxy.stdout.log"),
-      proxy?.stdout() || ""
-    ),
-    writeArtifactFile(
-      path.join(artifactRoot, "proxy.stderr.log"),
-      proxy?.stderr() || ""
-    ),
+    writeArtifactFile(path.join(artifactRoot, "summary.json"), JSON.stringify(results, null, 2)),
+    writeArtifactFile(path.join(artifactRoot, "proxy.stdout.log"), proxy?.stdout() || ""),
+    writeArtifactFile(path.join(artifactRoot, "proxy.stderr.log"), proxy?.stderr() || ""),
   ]);
 }
 
@@ -718,16 +667,10 @@ async function main() {
   try {
     for (const provider of providers) {
       logSection(`Provider ${provider.name}`);
-      const result = await runProviderCase(
-        cwd,
-        proxyBaseUrl,
-        provider,
-        proxy,
-        artifactRoot
-      );
+      const result = await runProviderCase(cwd, proxyBaseUrl, provider, proxy, artifactRoot);
       results.push(result);
       console.log(
-        `[${result.outcome}] ${result.name} (${result.provider}) - ${result.details} | logs: ${result.logDir}`
+        `[${result.outcome}] ${result.name} (${result.provider}) - ${result.details} | logs: ${result.logDir}`,
       );
     }
   } finally {

@@ -74,9 +74,7 @@ function formatMs(value?: number): string {
 function summarizeText(value: string, maxLength = 160): string {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (!normalized) return "(empty)";
-  return normalized.length > maxLength
-    ? `${normalized.slice(0, maxLength)}...`
-    : normalized;
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized;
 }
 
 function relativeToCwd(target: string): string {
@@ -138,7 +136,7 @@ function getOutcomeCounts(results: ProviderRunResult[]) {
       acc[result.outcome] += 1;
       return acc;
     },
-    { PASS: 0, FAIL: 0, SKIP: 0 }
+    { PASS: 0, FAIL: 0, SKIP: 0 },
   );
 }
 
@@ -148,9 +146,7 @@ function extractProxyLastRequest(proxyStdout: string): string | undefined {
     .map((line) => line.trim())
     .filter(Boolean);
 
-  const lastRequest = [...lines]
-    .reverse()
-    .find((line) => /^\[\d{4}-\d{2}-\d{2}T/.test(line));
+  const lastRequest = [...lines].reverse().find((line) => /^\[\d{4}-\d{2}-\d{2}T/.test(line));
 
   return lastRequest;
 }
@@ -169,8 +165,8 @@ async function loadProviderRows(results: ProviderRunResult[]): Promise<ProviderR
         LOG_FILES.map(async (fileName) => [
           fileName,
           logDir ? await readTextIfExists(path.join(logDir, fileName)) : "",
-        ])
-      )
+        ]),
+      ),
     ) as Record<string, string>;
 
     rows.push({
@@ -196,18 +192,11 @@ async function loadProviderRows(results: ProviderRunResult[]): Promise<ProviderR
 
 function renderComparison(rows: ProviderReportRow[]): string {
   const comparable = rows.filter(
-    (row) =>
-      row.metrics.firstTokenMs !== undefined || row.metrics.totalMs !== undefined
+    (row) => row.metrics.firstTokenMs !== undefined || row.metrics.totalMs !== undefined,
   );
 
-  const maxFirstToken = Math.max(
-    ...comparable.map((row) => row.metrics.firstTokenMs || 0),
-    0
-  );
-  const maxTotal = Math.max(
-    ...comparable.map((row) => row.metrics.totalMs || 0),
-    0
-  );
+  const maxFirstToken = Math.max(...comparable.map((row) => row.metrics.firstTokenMs || 0), 0);
+  const maxTotal = Math.max(...comparable.map((row) => row.metrics.totalMs || 0), 0);
 
   if (comparable.length === 0) {
     return `
@@ -231,8 +220,7 @@ function renderComparison(rows: ProviderReportRow[]): string {
               firstToken !== undefined && maxFirstToken > 0
                 ? (firstToken / maxFirstToken) * 100
                 : 0;
-            const totalWidth =
-              total !== undefined && maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+            const totalWidth = total !== undefined && maxTotal > 0 ? (total / maxTotal) * 100 : 0;
 
             return `
               <div class="comparison-row">
@@ -253,7 +241,7 @@ function renderComparison(rows: ProviderReportRow[]): string {
                 <div class="comparison-metric compact">
                   <span class="metric-name">Claude wall</span>
                   <span class="metric-value">${escapeHtml(
-                    formatMs(row.metrics.claudeWallTimeMs)
+                    formatMs(row.metrics.claudeWallTimeMs),
                   )}</span>
                 </div>
               </div>

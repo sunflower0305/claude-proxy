@@ -3,13 +3,7 @@ import { loadEnvFile } from "node:process";
 
 if (existsSync(".env")) loadEnvFile(".env");
 
-export type ProviderKey =
-  | "deepseek"
-  | "qwen"
-  | "glm"
-  | "minimax"
-  | "kimi"
-  | "mimo";
+export type ProviderKey = "deepseek" | "qwen" | "glm" | "minimax" | "kimi" | "mimo";
 
 export interface ProviderDefinition {
   key: ProviderKey;
@@ -35,9 +29,7 @@ export function getProviderDefinitions(): ProviderDefinition[] {
       name: "DeepSeek",
       apiKeyEnv: ["DEEPSEEK_API_KEY"],
       apiKey: pickEnv("DEEPSEEK_API_KEY"),
-      baseUrl:
-        pickEnv("DEEPSEEK_ANTHROPIC_BASE_URL") ||
-        "https://api.deepseek.com/anthropic",
+      baseUrl: pickEnv("DEEPSEEK_ANTHROPIC_BASE_URL") || "https://api.deepseek.com/anthropic",
       model: pickEnv("DEEPSEEK_MODEL") || "deepseek-v4-pro",
     },
     {
@@ -46,8 +38,7 @@ export function getProviderDefinitions(): ProviderDefinition[] {
       apiKeyEnv: ["QWEN_API_KEY", "DASHSCOPE_API_KEY"],
       apiKey: pickEnv("QWEN_API_KEY", "DASHSCOPE_API_KEY"),
       baseUrl:
-        pickEnv("QWEN_ANTHROPIC_BASE_URL") ||
-        "https://dashscope.aliyuncs.com/apps/anthropic",
+        pickEnv("QWEN_ANTHROPIC_BASE_URL") || "https://dashscope.aliyuncs.com/apps/anthropic",
       model: pickEnv("QWEN_MODEL") || "qwen-plus",
     },
     {
@@ -55,9 +46,7 @@ export function getProviderDefinitions(): ProviderDefinition[] {
       name: "GLM",
       apiKeyEnv: ["GLM_API_KEY"],
       apiKey: pickEnv("GLM_API_KEY"),
-      baseUrl:
-        pickEnv("GLM_ANTHROPIC_BASE_URL") ||
-        "https://open.bigmodel.cn/api/anthropic",
+      baseUrl: pickEnv("GLM_ANTHROPIC_BASE_URL") || "https://open.bigmodel.cn/api/anthropic",
       model: pickEnv("GLM_MODEL") || "glm-5",
     },
     {
@@ -65,9 +54,7 @@ export function getProviderDefinitions(): ProviderDefinition[] {
       name: "MiniMax",
       apiKeyEnv: ["MINIMAX_API_KEY"],
       apiKey: pickEnv("MINIMAX_API_KEY"),
-      baseUrl:
-        pickEnv("MINIMAX_ANTHROPIC_BASE_URL") ||
-        "https://api.minimaxi.com/anthropic",
+      baseUrl: pickEnv("MINIMAX_ANTHROPIC_BASE_URL") || "https://api.minimaxi.com/anthropic",
       model: pickEnv("MINIMAX_MODEL") || "minimax-m2.7-highspeed",
     },
     {
@@ -75,9 +62,7 @@ export function getProviderDefinitions(): ProviderDefinition[] {
       name: "Kimi",
       apiKeyEnv: ["KIMI_API_KEY"],
       apiKey: pickEnv("KIMI_API_KEY"),
-      baseUrl:
-        pickEnv("KIMI_ANTHROPIC_BASE_URL") ||
-        "https://api.moonshot.cn/anthropic",
+      baseUrl: pickEnv("KIMI_ANTHROPIC_BASE_URL") || "https://api.moonshot.cn/anthropic",
       model: pickEnv("KIMI_MODEL") || "kimi-k2.5",
     },
     {
@@ -85,9 +70,7 @@ export function getProviderDefinitions(): ProviderDefinition[] {
       name: "MIMO",
       apiKeyEnv: ["MIMO_API_KEY"],
       apiKey: pickEnv("MIMO_API_KEY"),
-      baseUrl:
-        pickEnv("MIMO_ANTHROPIC_BASE_URL") ||
-        "https://api.xiaomimimo.com/anthropic",
+      baseUrl: pickEnv("MIMO_ANTHROPIC_BASE_URL") || "https://api.xiaomimimo.com/anthropic",
       model: pickEnv("MIMO_MODEL") || "mimo-v2.5-pro",
     },
   ];

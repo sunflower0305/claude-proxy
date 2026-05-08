@@ -58,43 +58,32 @@ function pickEnv(...keys: string[]): string | undefined {
 
 const PROVIDERS = {
   deepseek: {
-    baseUrl:
-      pickEnv("DEEPSEEK_ANTHROPIC_BASE_URL") ||
-      "https://api.deepseek.com/anthropic",
+    baseUrl: pickEnv("DEEPSEEK_ANTHROPIC_BASE_URL") || "https://api.deepseek.com/anthropic",
     apiKey: process.env.DEEPSEEK_API_KEY || "",
     model: pickEnv("DEEPSEEK_MODEL") || "deepseek-v4-pro",
   },
   qwen: {
-    baseUrl:
-      pickEnv("QWEN_ANTHROPIC_BASE_URL") ||
-      "https://dashscope.aliyuncs.com/apps/anthropic",
+    baseUrl: pickEnv("QWEN_ANTHROPIC_BASE_URL") || "https://dashscope.aliyuncs.com/apps/anthropic",
     apiKey: process.env.QWEN_API_KEY || "",
     model: pickEnv("QWEN_MODEL") || "qwen-plus",
   },
   glm: {
-    baseUrl:
-      pickEnv("GLM_ANTHROPIC_BASE_URL") ||
-      "https://open.bigmodel.cn/api/anthropic",
+    baseUrl: pickEnv("GLM_ANTHROPIC_BASE_URL") || "https://open.bigmodel.cn/api/anthropic",
     apiKey: process.env.GLM_API_KEY || "",
     model: pickEnv("GLM_MODEL") || "glm-5.1",
   },
   minimax: {
-    baseUrl:
-      pickEnv("MINIMAX_ANTHROPIC_BASE_URL") ||
-      "https://api.minimaxi.com/anthropic",
+    baseUrl: pickEnv("MINIMAX_ANTHROPIC_BASE_URL") || "https://api.minimaxi.com/anthropic",
     apiKey: process.env.MINIMAX_API_KEY || "",
     model: pickEnv("MINIMAX_MODEL") || "minimax-m2.7-highspeed",
   },
   kimi: {
-    baseUrl:
-      pickEnv("KIMI_ANTHROPIC_BASE_URL") || "https://api.moonshot.cn/anthropic",
+    baseUrl: pickEnv("KIMI_ANTHROPIC_BASE_URL") || "https://api.moonshot.cn/anthropic",
     apiKey: process.env.KIMI_API_KEY || "",
     model: pickEnv("KIMI_MODEL") || "kimi-k2.6",
   },
   mimo: {
-    baseUrl:
-      pickEnv("MIMO_ANTHROPIC_BASE_URL") ||
-      "https://api.xiaomimimo.com/anthropic",
+    baseUrl: pickEnv("MIMO_ANTHROPIC_BASE_URL") || "https://api.xiaomimimo.com/anthropic",
     apiKey: process.env.MIMO_API_KEY || "",
     model: pickEnv("MIMO_MODEL") || "mimo-v2.5-pro",
   },
@@ -107,18 +96,14 @@ function isProviderKey(value: string | undefined): value is ProviderKey {
 }
 
 function getInitialProvider(): ProviderKey {
-  return isProviderKey(process.env.PROVIDER)
-    ? process.env.PROVIDER
-    : "deepseek";
+  return isProviderKey(process.env.PROVIDER) ? process.env.PROVIDER : "deepseek";
 }
 
 function getProviderConfig(provider: ProviderKey): ProviderConfig {
   return PROVIDERS[provider] || PROVIDERS.deepseek;
 }
 
-function getHeaderValue(
-  value: string | string[] | undefined
-): string | undefined {
+function getHeaderValue(value: string | string[] | undefined): string | undefined {
   if (Array.isArray(value)) return value.join(",");
   return value;
 }
@@ -126,17 +111,15 @@ function getHeaderValue(
 function buildUpstreamHeaders(
   req: express.Request,
   stream: boolean,
-  apiKey: string
+  apiKey: string,
 ): Record<string, string> {
   const headers: Record<string, string> = {
     "content-type": "application/json",
     "x-api-key": apiKey,
     "anthropic-version":
-      getHeaderValue(req.headers["anthropic-version"]) ||
-      DEFAULT_ANTHROPIC_VERSION,
+      getHeaderValue(req.headers["anthropic-version"]) || DEFAULT_ANTHROPIC_VERSION,
     accept:
-      getHeaderValue(req.headers.accept) ||
-      (stream ? "text/event-stream" : "application/json"),
+      getHeaderValue(req.headers.accept) || (stream ? "text/event-stream" : "application/json"),
   };
 
   const anthropicBeta = getHeaderValue(req.headers["anthropic-beta"]);
@@ -151,14 +134,9 @@ function getUpstreamUrl(baseUrl: string): string {
   return `${baseUrl.replace(/\/$/, "")}/v1/messages`;
 }
 
-function buildUpstreamBody(
-  body: unknown,
-  targetModel: string
-): Record<string, unknown> {
+function buildUpstreamBody(body: unknown, targetModel: string): Record<string, unknown> {
   const normalized =
-    typeof body === "object" && body !== null
-      ? { ...(body as Record<string, unknown>) }
-      : {};
+    typeof body === "object" && body !== null ? { ...(body as Record<string, unknown>) } : {};
   normalized.model = targetModel;
   return normalized;
 }
@@ -195,9 +173,7 @@ function getBearerToken(authorization: string | undefined): string | undefined {
   return match?.[1]?.trim() || undefined;
 }
 
-function inferProviderFromModel(
-  model: string | undefined
-): ProviderKey | undefined {
+function inferProviderFromModel(model: string | undefined): ProviderKey | undefined {
   if (!model) return undefined;
 
   const normalizedModel = model.toLowerCase();
@@ -209,14 +185,8 @@ function inferProviderFromModel(
 
 function logTimingEvent(
   trace: RequestTrace,
-  phase:
-    | "start"
-    | "upstream_headers"
-    | "first_chunk"
-    | "completed"
-    | "client_aborted"
-    | "error",
-  extra: Record<string, unknown> = {}
+  phase: "start" | "upstream_headers" | "first_chunk" | "completed" | "client_aborted" | "error",
+  extra: Record<string, unknown> = {},
 ) {
   console.log(
     `[ProxyTiming] ${JSON.stringify({
@@ -229,7 +199,7 @@ function logTimingEvent(
       elapsed_ms: Date.now() - trace.startedAt,
       at: new Date().toISOString(),
       ...extra,
-    })}`
+    })}`,
   );
 }
 
@@ -248,11 +218,7 @@ export function createApp(): express.Express {
     }
 
     const normalizedModel = requestedModel.toLowerCase();
-    if (
-      normalizedModel === "opus" ||
-      normalizedModel === "sonnet" ||
-      normalizedModel === "haiku"
-    ) {
+    if (normalizedModel === "opus" || normalizedModel === "sonnet" || normalizedModel === "haiku") {
       return getConfig().model;
     }
 
@@ -271,12 +237,13 @@ export function createApp(): express.Express {
   function createRequestTrace(
     requestedModel: unknown,
     targetModel: string,
-    stream: boolean
+    stream: boolean,
   ): RequestTrace {
     return {
       requestId: `req-${++requestSequence}`,
       provider: currentProvider,
-      requestedModel: String(requestedModel || getConfig().model),
+      requestedModel:
+        typeof requestedModel === "string" && requestedModel ? requestedModel : targetModel,
       targetModel,
       stream,
       startedAt: Date.now(),
@@ -286,7 +253,7 @@ export function createApp(): express.Express {
   function requireProxyApiKey(
     req: express.Request,
     res: express.Response,
-    next: express.NextFunction
+    next: express.NextFunction,
   ) {
     if (!proxyApiKey) {
       next();
@@ -306,10 +273,7 @@ export function createApp(): express.Express {
     res.status(401).json(createAuthenticationError());
   }
 
-  async function handleNonStreamingRequest(
-    req: express.Request,
-    res: express.Response
-  ) {
+  async function handleNonStreamingRequest(req: express.Request, res: express.Response) {
     const config = getConfig();
     const targetModel = getTargetModel(req.body?.model);
     const requestBody = buildUpstreamBody(req.body, targetModel);
@@ -344,10 +308,7 @@ export function createApp(): express.Express {
     }
   }
 
-  async function handleStreamingRequest(
-    req: express.Request,
-    res: express.Response
-  ) {
+  async function handleStreamingRequest(req: express.Request, res: express.Response) {
     const config = getConfig();
     const targetModel = getTargetModel(req.body?.model);
     const requestBody = buildUpstreamBody(req.body, targetModel);
@@ -428,8 +389,7 @@ export function createApp(): express.Express {
         res.on("close", () => resolve());
       });
     } catch (error: any) {
-      const wasAborted =
-        error?.name === "AbortError" || abortController.signal.aborted;
+      const wasAborted = error?.name === "AbortError" || abortController.signal.aborted;
 
       if (clientClosed || wasAborted) {
         console.warn("[Proxy] Client disconnected, streaming aborted");
@@ -551,9 +511,7 @@ function isMainModule() {
   if (!entryPath) return false;
 
   try {
-    return (
-      realpathSync(entryPath) === realpathSync(fileURLToPath(import.meta.url))
-    );
+    return realpathSync(entryPath) === realpathSync(fileURLToPath(import.meta.url));
   } catch {
     return false;
   }
@@ -567,9 +525,7 @@ if (isMainModule()) {
     : "any-string-works";
 
   if (!initialConfig.apiKey) {
-    console.warn(
-      `Warning: API key not configured for provider: ${initialProvider}`
-    );
+    console.warn(`Warning: API key not configured for provider: ${initialProvider}`);
     console.warn("Please set the appropriate environment variable in .env");
   }
 

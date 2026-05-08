@@ -56,9 +56,7 @@ function buildMessageBody(model: string, stream: boolean) {
   };
 }
 
-async function runNonStreamingTest(
-  testCase: AnthropicCompatibilityCase
-): Promise<TestResult> {
+async function runNonStreamingTest(testCase: AnthropicCompatibilityCase): Promise<TestResult> {
   if (!testCase.apiKey) {
     return {
       name: testCase.name,
@@ -111,9 +109,7 @@ async function runNonStreamingTest(
   };
 }
 
-async function runStreamingTest(
-  testCase: AnthropicCompatibilityCase
-): Promise<TestResult> {
+async function runStreamingTest(testCase: AnthropicCompatibilityCase): Promise<TestResult> {
   if (!testCase.apiKey) {
     return {
       name: testCase.name,
@@ -191,10 +187,7 @@ async function runStreamingTest(
     if (eventName === "message_start") sawMessageStart = true;
     if (eventName === "message_stop") sawMessageStop = true;
 
-    if (
-      eventName === "content_block_start" &&
-      payload?.content_block?.type === "thinking"
-    ) {
+    if (eventName === "content_block_start" && payload?.content_block?.type === "thinking") {
       sawThinking = true;
     }
 
@@ -207,17 +200,13 @@ async function runStreamingTest(
       outputText += payload.delta.text;
     }
 
-    if (
-      eventName === "content_block_start" &&
-      payload?.content_block?.type === "tool_use"
-    ) {
+    if (eventName === "content_block_start" && payload?.content_block?.type === "tool_use") {
       sawToolUse = true;
     }
 
     if (
       eventName === "content_block_delta" &&
-      (payload?.delta?.type === "thinking_delta" ||
-        typeof payload?.delta?.thinking === "string")
+      (payload?.delta?.type === "thinking_delta" || typeof payload?.delta?.thinking === "string")
     ) {
       sawThinking = true;
     }
@@ -254,8 +243,7 @@ async function runStreamingTest(
     processEventBlock(buffer);
   }
 
-  const ok =
-    sawMessageStart && sawMessageStop && (sawTextDelta || sawToolUse || sawThinking);
+  const ok = sawMessageStart && sawMessageStop && (sawTextDelta || sawToolUse || sawThinking);
 
   return {
     name: testCase.name,
@@ -271,7 +259,7 @@ async function runStreamingTest(
 
 export async function runAnthropicCompatibilitySuite(
   title: string,
-  testCases: AnthropicCompatibilityCase[]
+  testCases: AnthropicCompatibilityCase[],
 ) {
   console.log(title);
 
@@ -286,7 +274,7 @@ export async function runAnthropicCompatibilitySuite(
   console.log("\nResults:");
   for (const result of results) {
     console.log(
-      `[${result.outcome}] ${result.name} / ${result.model} (${result.mode}) -> HTTP ${result.status} | ${result.details}`
+      `[${result.outcome}] ${result.name} / ${result.model} (${result.mode}) -> HTTP ${result.status} | ${result.details}`,
     );
   }
 

@@ -1,8 +1,4 @@
-import http, {
-  type IncomingMessage,
-  type Server,
-  type ServerResponse,
-} from "node:http";
+import http, { type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { once } from "node:events";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -48,7 +44,7 @@ const providerCases = [
   { provider: "mimo", expectedModel: mimoUpstreamModel },
 ] as const;
 const streamingProviderCases = providerCases.filter(
-  ({ provider }) => provider === "deepseek" || provider === "kimi"
+  ({ provider }) => provider === "deepseek" || provider === "kimi",
 );
 const claudeAliasModels = [
   "claude-sonnet-4-6",
@@ -202,7 +198,7 @@ function writeJson(
   res: ServerResponse,
   status: number,
   payload: unknown,
-  headers?: Record<string, string>
+  headers?: Record<string, string>,
 ) {
   res.statusCode = status;
   res.setHeader("content-type", "application/json");
@@ -233,7 +229,7 @@ function expectProviderState(
   payload: unknown,
   provider: ProviderCase["provider"],
   expectedModel: string,
-  upstreamPort: number
+  upstreamPort: number,
 ) {
   expect(payload).toEqual({
     provider,
@@ -243,23 +239,16 @@ function expectProviderState(
   });
 }
 
-function expectForwardedRequest(
-  harness: TestHarness,
-  expectation: ForwardedRequestExpectation
-) {
+function expectForwardedRequest(harness: TestHarness, expectation: ForwardedRequestExpectation) {
   const forwardedRequest = getLastRecordedRequest(harness);
 
   expect(forwardedRequest.headers["x-api-key"]).toBe(upstreamApiKey);
   expect(forwardedRequest.headers["anthropic-version"]).toBe(
-    expectation.anthropicVersion ?? "2023-06-01"
+    expectation.anthropicVersion ?? "2023-06-01",
   );
-  expect(forwardedRequest.headers.accept).toBe(
-    expectation.accept ?? "*/*"
-  );
+  expect(forwardedRequest.headers.accept).toBe(expectation.accept ?? "*/*");
   if (expectation.anthropicBeta) {
-    expect(forwardedRequest.headers["anthropic-beta"]).toBe(
-      expectation.anthropicBeta
-    );
+    expect(forwardedRequest.headers["anthropic-beta"]).toBe(expectation.anthropicBeta);
   } else {
     expect(forwardedRequest.headers["anthropic-beta"]).toBeUndefined();
   }
@@ -268,9 +257,7 @@ function expectForwardedRequest(
   expect(forwardedRequest.body.system).toEqual(harness.requestPayload.system);
   expect(forwardedRequest.body.messages).toEqual(harness.requestPayload.messages);
   expect(forwardedRequest.body.tools).toEqual(harness.requestPayload.tools);
-  expect(forwardedRequest.body.tool_choice).toEqual(
-    harness.requestPayload.tool_choice
-  );
+  expect(forwardedRequest.body.tool_choice).toEqual(harness.requestPayload.tool_choice);
   expect(forwardedRequest.body.thinking).toEqual(harness.requestPayload.thinking);
   expect(forwardedRequest.body.metadata).toEqual(expectation.metadata);
   if (expectation.stream) {
@@ -345,14 +332,15 @@ async function createHarness(envOverrides: EnvOverrides = {}): Promise<TestHarne
         usage: { input_tokens: 1, output_tokens: 1 },
         metadata_echo: body.metadata,
       },
-      { "x-upstream-id": "mock-upstream" }
+      { "x-upstream-id": "mock-upstream" },
     );
   });
   const upstreamPort = await startServer(upstream);
 
-  const envBackup = Object.fromEntries(
-    testEnvKeys.map((key) => [key, process.env[key]])
-  ) as Record<TestEnvKey, string | undefined>;
+  const envBackup = Object.fromEntries(testEnvKeys.map((key) => [key, process.env[key]])) as Record<
+    TestEnvKey,
+    string | undefined
+  >;
 
   const envValues: Record<TestEnvKey, string | undefined> = {
     PROVIDER: "deepseek",
@@ -409,7 +397,7 @@ async function createHarness(envOverrides: EnvOverrides = {}): Promise<TestHarne
 async function switchProvider(
   baseUrl: string,
   provider: string,
-  headers: Record<string, string> = {}
+  headers: Record<string, string> = {},
 ) {
   return fetch(`${baseUrl}/api/provider`, {
     method: "POST",
@@ -434,7 +422,7 @@ async function switchProviderByModel(baseUrl: string, model: string) {
 async function postMessages(
   harness: TestHarness,
   bodyOverrides: Record<string, unknown>,
-  headers: Record<string, string> = {}
+  headers: Record<string, string> = {},
 ) {
   return fetch(`${harness.proxyBaseUrl}/v1/messages`, {
     method: "POST",
@@ -453,7 +441,7 @@ async function postMessages(
 function sendRawPost(
   url: string,
   body: string,
-  headers: Record<string, string>
+  headers: Record<string, string>,
 ): Promise<{ status: number; text: string }> {
   return new Promise((resolve, reject) => {
     const request = http.request(
@@ -476,7 +464,7 @@ function sendRawPost(
             text: Buffer.concat(chunks).toString("utf8"),
           });
         });
-      }
+      },
     );
 
     request.on("error", reject);
@@ -530,14 +518,14 @@ describe.sequential("proxy local integration", () => {
     const response = await postMessages(
       harness,
       { metadata: { case: "success", trace_id: "auth-disabled" } },
-      { "x-api-key": "any-client-token" }
+      { "x-api-key": "any-client-token" },
     );
 
     expect(response.status).toBe(200);
     expect(harness.recordedRequests).toHaveLength(1);
   });
 
-  it.each([
+  it.each<{ label: string; headers: Record<string, string> }>([
     { label: "x-api-key", headers: { "x-api-key": "local-proxy-token" } },
     {
       label: "authorization bearer",
@@ -559,7 +547,7 @@ describe.sequential("proxy local integration", () => {
     expect(harness.recordedRequests).toHaveLength(1);
   });
 
-  it.each([
+  it.each<{ label: string; headers: Record<string, string> }>([
     { label: "missing", headers: {} },
     { label: "invalid", headers: { "x-api-key": "wrong-token" } },
   ])(
@@ -587,7 +575,7 @@ describe.sequential("proxy local integration", () => {
         },
       });
       expect(harness.recordedRequests).toHaveLength(0);
-    }
+    },
   );
 
   it("rejects unauthorized provider switches without changing the provider", async () => {
@@ -606,15 +594,13 @@ describe.sequential("proxy local integration", () => {
       },
     });
 
-    const currentProviderResponse = await fetch(
-      `${harness.proxyBaseUrl}/api/provider`
-    );
+    const currentProviderResponse = await fetch(`${harness.proxyBaseUrl}/api/provider`);
     expect(currentProviderResponse.status).toBe(200);
     expectProviderState(
       await currentProviderResponse.json(),
       "deepseek",
       upstreamModel,
-      harness.upstreamPort
+      harness.upstreamPort,
     );
   });
 
@@ -674,7 +660,7 @@ describe.sequential("proxy local integration", () => {
       await providerResponse.json(),
       "deepseek",
       upstreamModel,
-      harness.upstreamPort
+      harness.upstreamPort,
     );
   });
 
@@ -705,7 +691,7 @@ describe.sequential("proxy local integration", () => {
     const originalCwd = process.cwd();
     const tempDir = await mkdtemp(path.join(tmpdir(), "claude-proxy-env-"));
     const envBackup = Object.fromEntries(
-      testEnvKeys.map((key) => [key, process.env[key]])
+      testEnvKeys.map((key) => [key, process.env[key]]),
     ) as Record<TestEnvKey, string | undefined>;
     const recordedRequests: RecordedRequest[] = [];
     let proxy: Server | undefined;
@@ -742,7 +728,7 @@ describe.sequential("proxy local integration", () => {
           `DEEPSEEK_ANTHROPIC_BASE_URL=http://127.0.0.1:${upstreamPort}`,
           "",
         ].join("\n"),
-        "utf8"
+        "utf8",
       );
 
       process.chdir(tempDir);
@@ -751,9 +737,7 @@ describe.sequential("proxy local integration", () => {
       const startedProxy = await startProxyServer(createApp);
       proxy = startedProxy.proxy;
 
-      const providerResponse = await fetch(
-        `${startedProxy.proxyBaseUrl}/api/provider`
-      );
+      const providerResponse = await fetch(`${startedProxy.proxyBaseUrl}/api/provider`);
       expect(providerResponse.status).toBe(200);
       await expect(providerResponse.json()).resolves.toEqual({
         provider: "deepseek",
@@ -762,22 +746,17 @@ describe.sequential("proxy local integration", () => {
         availableProviders,
       });
 
-      const messageResponse = await fetch(
-        `${startedProxy.proxyBaseUrl}/v1/messages`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-api-key": "client-placeholder",
-          },
-          body: JSON.stringify(buildRequestPayload()),
-        }
-      );
+      const messageResponse = await fetch(`${startedProxy.proxyBaseUrl}/v1/messages`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "client-placeholder",
+        },
+        body: JSON.stringify(buildRequestPayload()),
+      });
 
       expect(messageResponse.status).toBe(200);
-      expect(recordedRequests.at(-1)?.headers["x-api-key"]).toBe(
-        "existing-secret"
-      );
+      expect(recordedRequests.at(-1)?.headers["x-api-key"]).toBe("existing-secret");
     } finally {
       if (proxy) await closeServer(proxy);
       if (upstream) await closeServer(upstream);
@@ -796,7 +775,7 @@ describe.sequential("proxy local integration", () => {
 
     const originalArgv1 = process.argv[1];
     const envBackup = Object.fromEntries(
-      testEnvKeys.map((key) => [key, process.env[key]])
+      testEnvKeys.map((key) => [key, process.env[key]]),
     ) as Record<TestEnvKey, string | undefined>;
 
     try {
@@ -804,20 +783,16 @@ describe.sequential("proxy local integration", () => {
         setEnv(key, undefined);
       }
 
-      delete process.argv[1];
+      Reflect.deleteProperty(process.argv, "1");
       vi.resetModules();
-      await expect(import("../../src/proxy.ts")).resolves.toHaveProperty(
-        "createApp"
-      );
+      await expect(import("../../src/proxy.ts")).resolves.toHaveProperty("createApp");
 
       process.argv[1] = "/path/that/does/not/exist/claude-proxy.js";
       vi.resetModules();
-      await expect(import("../../src/proxy.ts")).resolves.toHaveProperty(
-        "createApp"
-      );
+      await expect(import("../../src/proxy.ts")).resolves.toHaveProperty("createApp");
     } finally {
       if (originalArgv1 === undefined) {
-        delete process.argv[1];
+        Reflect.deleteProperty(process.argv, "1");
       } else {
         process.argv[1] = originalArgv1;
       }
@@ -839,7 +814,7 @@ describe.sequential("proxy local integration", () => {
         provider,
         model: expectedModel,
       });
-    }
+    },
   );
 
   it("rejects switching providers when the target API key is missing", async () => {
@@ -854,16 +829,14 @@ describe.sequential("proxy local integration", () => {
       error: "API key not set for: kimi",
     });
 
-    const currentProviderResponse = await fetch(
-      `${harness.proxyBaseUrl}/api/provider`
-    );
+    const currentProviderResponse = await fetch(`${harness.proxyBaseUrl}/api/provider`);
 
     expect(currentProviderResponse.status).toBe(200);
     expectProviderState(
       await currentProviderResponse.json(),
       "deepseek",
       upstreamModel,
-      harness.upstreamPort
+      harness.upstreamPort,
     );
   });
 
@@ -887,7 +860,7 @@ describe.sequential("proxy local integration", () => {
       await providerResponse.json(),
       "kimi",
       kimiUpstreamModel,
-      harness.upstreamPort
+      harness.upstreamPort,
     );
   });
 
@@ -911,21 +884,18 @@ describe.sequential("proxy local integration", () => {
         case: "success",
         trace_id: `${provider}-non-stream`,
       };
-      const anthropicBeta =
-        provider === "deepseek" ? "tools-2024-04-04" : undefined;
+      const anthropicBeta = provider === "deepseek" ? "tools-2024-04-04" : undefined;
 
       await switchProvider(harness.proxyBaseUrl, provider);
 
       const response = await postMessages(
         harness,
         { metadata },
-        anthropicBeta ? { "anthropic-beta": anthropicBeta } : {}
+        anthropicBeta ? { "anthropic-beta": anthropicBeta } : {},
       );
 
       expect(response.status).toBe(200);
-      expect(response.headers.get("content-type") || "").toMatch(
-        /^application\/json/i
-      );
+      expect(response.headers.get("content-type") || "").toMatch(/^application\/json/i);
       expect(response.headers.get("x-upstream-id")).toBe("mock-upstream");
       await expect(response.json()).resolves.toMatchObject({
         model: expectedModel,
@@ -937,7 +907,7 @@ describe.sequential("proxy local integration", () => {
         metadata,
         anthropicBeta,
       });
-    }
+    },
   );
 
   it.each(claudeAliasModels)(
@@ -959,7 +929,7 @@ describe.sequential("proxy local integration", () => {
         expectedModel: upstreamModel,
         metadata,
       });
-    }
+    },
   );
 
   it("does not remap non-Claude model names that only contain a Claude family word", async () => {
@@ -1039,7 +1009,7 @@ describe.sequential("proxy local integration", () => {
       {
         accept: "application/json",
         "anthropic-version": "2024-01-01",
-      }
+      },
     );
 
     expect(response.status).toBe(200);
@@ -1095,21 +1065,17 @@ describe.sequential("proxy local integration", () => {
         metadata,
       });
 
-      const response = await sendRawPost(
-        `${harness.proxyBaseUrl}/v1/messages`,
-        body,
-        {
-          "content-type": "application/json",
-          "x-api-key": "client-placeholder",
-        }
-      );
+      const response = await sendRawPost(`${harness.proxyBaseUrl}/v1/messages`, body, {
+        "content-type": "application/json",
+        "x-api-key": "client-placeholder",
+      });
 
       expect(response.status).toBe(stream ? 204 : 200);
       const forwardedRequest = getLastRecordedRequest(harness);
       expect(forwardedRequest.headers.accept).toBe(expectedAccept);
       expect(forwardedRequest.body.model).toBe(upstreamModel);
       expect(forwardedRequest.body.metadata).toEqual(metadata);
-    }
+    },
   );
 
   it.each(streamingProviderCases)(
@@ -1125,9 +1091,7 @@ describe.sequential("proxy local integration", () => {
       });
 
       expect(response.status).toBe(200);
-      expect(response.headers.get("content-type") || "").toMatch(
-        /^text\/event-stream/i
-      );
+      expect(response.headers.get("content-type") || "").toMatch(/^text\/event-stream/i);
       await expect(response.text()).resolves.toBe(harness.ssePayload);
 
       expectForwardedRequest(harness, {
@@ -1135,7 +1099,7 @@ describe.sequential("proxy local integration", () => {
         metadata,
         stream: true,
       });
-    }
+    },
   );
 
   it("logs only the first stream chunk while passing through chunked SSE", async () => {
@@ -1149,7 +1113,7 @@ describe.sequential("proxy local integration", () => {
     expect(response.status).toBe(200);
     await expect(response.text()).resolves.toBe(
       'event: message_start\ndata: {"type":"message_start"}\n\n' +
-        'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+        'event: message_stop\ndata: {"type":"message_stop"}\n\n',
     );
 
     expectForwardedRequest(harness, {
@@ -1229,14 +1193,11 @@ describe.sequential("proxy local integration", () => {
         provider: expectedProvider,
         model: expectedModel,
       });
-    }
+    },
   );
 
   it("rejects abab model names instead of treating them as minimax", async () => {
-    const response = await switchProviderByModel(
-      harness.proxyBaseUrl,
-      "abab6.5s-chat"
-    );
+    const response = await switchProviderByModel(harness.proxyBaseUrl, "abab6.5s-chat");
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
@@ -1256,13 +1217,9 @@ describe.sequential("proxy local integration", () => {
   });
 
   it("rejects provider switch requests when the body is not parsed", async () => {
-    const response = await sendRawPost(
-      `${harness.proxyBaseUrl}/api/provider`,
-      "provider=kimi",
-      {
-        "content-type": "text/plain",
-      }
-    );
+    const response = await sendRawPost(`${harness.proxyBaseUrl}/api/provider`, "provider=kimi", {
+      "content-type": "text/plain",
+    });
 
     expect(response.status).toBe(400);
     expect(JSON.parse(response.text)).toEqual({
@@ -1274,10 +1231,7 @@ describe.sequential("proxy local integration", () => {
   it("rejects switching to an unknown provider without changing current provider", async () => {
     await switchProvider(harness.proxyBaseUrl, "deepseek");
 
-    const unsupportedResponse = await switchProvider(
-      harness.proxyBaseUrl,
-      "unknown-provider"
-    );
+    const unsupportedResponse = await switchProvider(harness.proxyBaseUrl, "unknown-provider");
 
     expect(unsupportedResponse.status).toBe(400);
     await expect(unsupportedResponse.json()).resolves.toEqual({
@@ -1285,16 +1239,14 @@ describe.sequential("proxy local integration", () => {
       available: availableProviders,
     });
 
-    const currentProviderResponse = await fetch(
-      `${harness.proxyBaseUrl}/api/provider`
-    );
+    const currentProviderResponse = await fetch(`${harness.proxyBaseUrl}/api/provider`);
 
     expect(currentProviderResponse.status).toBe(200);
     expectProviderState(
       await currentProviderResponse.json(),
       "deepseek",
       upstreamModel,
-      harness.upstreamPort
+      harness.upstreamPort,
     );
   });
 
@@ -1343,7 +1295,7 @@ describe.sequential("proxy local integration", () => {
     const upstreamPort = await startServer(upstream);
 
     const envBackup = Object.fromEntries(
-      testEnvKeys.map((key) => [key, process.env[key]])
+      testEnvKeys.map((key) => [key, process.env[key]]),
     ) as Record<TestEnvKey, string | undefined>;
 
     const envValues: Record<TestEnvKey, string | undefined> = {
@@ -1399,7 +1351,7 @@ describe.sequential("proxy local integration", () => {
           await firstProviderResponse.json(),
           "kimi",
           kimiUpstreamModel,
-          upstreamPort
+          upstreamPort,
         );
 
         expect(secondProviderResponse.status).toBe(200);
@@ -1407,7 +1359,7 @@ describe.sequential("proxy local integration", () => {
           await secondProviderResponse.json(),
           "deepseek",
           upstreamModel,
-          upstreamPort
+          upstreamPort,
         );
 
         expect(secondHealthResponse.status).toBe(200);

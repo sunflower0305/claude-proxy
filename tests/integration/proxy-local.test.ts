@@ -1,6 +1,7 @@
 import http, { type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { once } from "node:events";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import express from "express";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -179,7 +180,7 @@ function closeServer(server: Server) {
   });
 }
 
-async function startProxyServer(createApp: CreateApp) {
+async function startTestProxyServer(createApp: CreateApp) {
   const proxy = createApp().listen(0, "127.0.0.1");
   await once(proxy, "listening");
 
@@ -306,7 +307,38 @@ async function createHarness(envOverrides: EnvOverrides = {}): Promise<TestHarne
       res.setHeader("cache-control", "no-cache");
       res.write("event: message_start\n");
       res.write('data: {"type":"message_start"}\n\n');
-      res.end('event: message_stop\ndata: {"type":"message_stop"}\n\n');
+      setImmediate(() => {
+        res.end('event: message_stop\ndata: {"type":"message_stop"}\n\n');
+      });
+      return;
+    }
+
+    if (body?.metadata?.case === "stream-error-after-headers") {
+      res.statusCode = 200;
+      res.setHeader("content-type", "text/event-stream; charset=utf-8");
+      res.setHeader("cache-control", "no-cache");
+      res.write('event: message_start\ndata: {"type":"message_start"}\n\n');
+      setImmediate(() => {
+        res.destroy(new Error("upstream stream failure"));
+      });
+      return;
+    }
+
+    if (body?.metadata?.case === "stream-delay-headers") {
+      setTimeout(() => {
+        if (res.destroyed) return;
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/event-stream; charset=utf-8");
+        res.end('event: message_stop\ndata: {"type":"message_stop"}\n\n');
+      }, 100);
+      return;
+    }
+
+    if (body?.metadata?.case === "stream-hold-open") {
+      res.statusCode = 200;
+      res.setHeader("content-type", "text/event-stream; charset=utf-8");
+      res.setHeader("cache-control", "no-cache");
+      res.write('event: message_start\ndata: {"type":"message_start"}\n\n');
       return;
     }
 
@@ -375,7 +407,7 @@ async function createHarness(envOverrides: EnvOverrides = {}): Promise<TestHarne
 
   vi.resetModules();
   const { createApp } = await import("../../src/proxy.ts");
-  const { proxy, proxyBaseUrl } = await startProxyServer(createApp);
+  const { proxy, proxyBaseUrl } = await startTestProxyServer(createApp);
 
   return {
     proxyBaseUrl,
@@ -472,6 +504,106 @@ function sendRawPost(
   });
 }
 
+function abortStreamingPostAfterFirstChunk(
+  url: string,
+  body: string,
+  headers: Record<string, string>,
+): Promise<{ status: number; text: string }> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let status = 0;
+    const chunks: Buffer[] = [];
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve({
+        status,
+        text: Buffer.concat(chunks).toString("utf8"),
+      });
+    };
+    const request = http.request(
+      url,
+      {
+        method: "POST",
+        headers: {
+          "content-length": Buffer.byteLength(body).toString(),
+          ...headers,
+        },
+      },
+      (response) => {
+        status = response.statusCode ?? 0;
+        response.on("data", (chunk) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          response.destroy();
+          request.destroy();
+        });
+        response.on("close", finish);
+        response.on("error", finish);
+      },
+    );
+
+    request.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "ECONNRESET") {
+        finish();
+        return;
+      }
+      reject(error);
+    });
+    request.end(body);
+  });
+}
+
+function abortPostBeforeResponse(
+  url: string,
+  body: string,
+  headers: Record<string, string>,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    const request = http.request(
+      url,
+      {
+        method: "POST",
+        headers: {
+          "content-length": Buffer.byteLength(body).toString(),
+          ...headers,
+        },
+      },
+      (response) => {
+        response.resume();
+        response.on("close", finish);
+      },
+    );
+
+    request.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "ECONNRESET") {
+        finish();
+        return;
+      }
+      reject(error);
+    });
+    request.end(body, () => {
+      setTimeout(() => request.destroy(), 10);
+    });
+    setTimeout(finish, 200);
+  });
+}
+
+async function waitFor(predicate: () => boolean, timeoutMs = 500) {
+  const startedAt = Date.now();
+  while (!predicate()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error("Timed out waiting for condition");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 describe.sequential("proxy local integration", () => {
   let harness: TestHarness;
   let cleanupHarness: TestHarness | undefined;
@@ -550,6 +682,7 @@ describe.sequential("proxy local integration", () => {
   it.each<{ label: string; headers: Record<string, string> }>([
     { label: "missing", headers: {} },
     { label: "invalid", headers: { "x-api-key": "wrong-token" } },
+    { label: "invalid bearer", headers: { authorization: "Basic wrong-token" } },
   ])(
     "rejects message requests with $label proxy token without forwarding upstream",
     async ({ headers }) => {
@@ -734,7 +867,7 @@ describe.sequential("proxy local integration", () => {
       process.chdir(tempDir);
       vi.resetModules();
       const { createApp } = await import("../../src/proxy.ts");
-      const startedProxy = await startProxyServer(createApp);
+      const startedProxy = await startTestProxyServer(createApp);
       proxy = startedProxy.proxy;
 
       const providerResponse = await fetch(`${startedProxy.proxyBaseUrl}/api/provider`);
@@ -802,6 +935,74 @@ describe.sequential("proxy local integration", () => {
       vi.resetModules();
     }
   });
+
+  it.each([
+    { proxyApiKey: undefined, clientApiKeyHint: "any-string-works" },
+    { proxyApiKey: "local-proxy-token", clientApiKeyHint: "same value as PROXY_API_KEY" },
+  ])(
+    "starts the CLI server and prints startup guidance when PROXY_API_KEY is $proxyApiKey",
+    async ({ proxyApiKey, clientApiKeyHint }) => {
+      await cleanupHarness?.close();
+      cleanupHarness = undefined;
+
+      const envBackup = Object.fromEntries(
+        testEnvKeys.map((key) => [key, process.env[key]]),
+      ) as Record<TestEnvKey, string | undefined>;
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const listenSpy = vi
+        .spyOn(express.application, "listen")
+        .mockImplementation((...args: any[]) => {
+          const callback = args.find((arg) => typeof arg === "function");
+          callback?.();
+          return {
+            close(closeCallback?: (error?: Error) => void) {
+              closeCallback?.();
+            },
+          } as Server;
+        });
+      const originalArgv1 = process.argv[1];
+
+      try {
+        for (const key of testEnvKeys) {
+          setEnv(key, "");
+        }
+        process.env.PROVIDER = "deepseek";
+        process.env.PROXY_PORT = "0";
+        setEnv("PROXY_API_KEY", proxyApiKey);
+        process.argv[1] = path.resolve("src/proxy.ts");
+
+        vi.resetModules();
+        await import("../../src/proxy.ts");
+
+        expect(listenSpy).toHaveBeenCalledWith(0, expect.any(Function));
+        expect(warnSpy).toHaveBeenCalledWith(
+          "Warning: API key not configured for provider: deepseek",
+        );
+        expect(warnSpy).toHaveBeenCalledWith(
+          "Please set the appropriate environment variable in .env",
+        );
+        expect(logSpy).toHaveBeenCalledWith("Using deepseek as backend");
+        expect(logSpy).toHaveBeenCalledWith("Model: deepseek-v4-pro");
+        expect(
+          logSpy.mock.calls.some(([message]) => String(message).includes(clientApiKeyHint)),
+        ).toBe(true);
+      } finally {
+        if (originalArgv1 === undefined) {
+          Reflect.deleteProperty(process.argv, "1");
+        } else {
+          process.argv[1] = originalArgv1;
+        }
+        listenSpy.mockRestore();
+        logSpy.mockRestore();
+        warnSpy.mockRestore();
+        for (const key of testEnvKeys) {
+          setEnv(key, envBackup[key]);
+        }
+        vi.resetModules();
+      }
+    },
+  );
 
   it.each(providerCases)(
     "switches provider to $provider successfully",
@@ -1141,6 +1342,96 @@ describe.sequential("proxy local integration", () => {
     });
   });
 
+  it("ends the client response when the upstream stream errors after headers", async () => {
+    await switchProvider(harness.proxyBaseUrl, "deepseek");
+
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const response = await postMessages(harness, {
+        stream: true,
+        metadata: {
+          case: "stream-error-after-headers",
+          trace_id: "stream-error-after-headers",
+        },
+      });
+
+      expect(response.status).toBe(200);
+      await expect(response.text()).resolves.toContain("message_start");
+      expect(errorSpy.mock.calls.some(([message]) => message === "Upstream stream error:")).toBe(
+        true,
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("aborts the upstream stream when the client disconnects after receiving headers", async () => {
+    await switchProvider(harness.proxyBaseUrl, "deepseek");
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const body = JSON.stringify({
+        ...harness.requestPayload,
+        stream: true,
+        metadata: {
+          case: "stream-hold-open",
+          trace_id: "stream-client-abort-after-headers",
+        },
+      });
+
+      const response = await abortStreamingPostAfterFirstChunk(
+        `${harness.proxyBaseUrl}/v1/messages`,
+        body,
+        {
+          "content-type": "application/json",
+          "x-api-key": "client-placeholder",
+        },
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.text).toContain("message_start");
+      await waitFor(() =>
+        logSpy.mock.calls.some(([message]) => String(message).includes('"phase":"client_aborted"')),
+      );
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("suppresses streaming abort errors when the client disconnects before upstream headers", async () => {
+    await switchProvider(harness.proxyBaseUrl, "deepseek");
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const body = JSON.stringify({
+        ...harness.requestPayload,
+        stream: true,
+        metadata: {
+          case: "stream-delay-headers",
+          trace_id: "stream-client-abort-before-headers",
+        },
+      });
+
+      await abortPostBeforeResponse(`${harness.proxyBaseUrl}/v1/messages`, body, {
+        "content-type": "application/json",
+        "x-api-key": "client-placeholder",
+      });
+
+      await waitFor(() =>
+        logSpy.mock.calls.some(([message]) => String(message).includes('"phase":"client_aborted"')),
+      );
+      await waitFor(() =>
+        warnSpy.mock.calls.some(
+          ([message]) => message === "[Proxy] Client disconnected, streaming aborted",
+        ),
+      );
+    } finally {
+      logSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
+  });
+
   it("returns a proxy error when the streaming upstream is unreachable", async () => {
     await cleanupHarness?.close();
     harness = await createHarness({
@@ -1331,8 +1622,8 @@ describe.sequential("proxy local integration", () => {
     try {
       const { createApp } = await import("../../src/proxy.ts");
       const [first, second] = await Promise.all([
-        startProxyServer(createApp),
-        startProxyServer(createApp),
+        startTestProxyServer(createApp),
+        startTestProxyServer(createApp),
       ]);
 
       try {

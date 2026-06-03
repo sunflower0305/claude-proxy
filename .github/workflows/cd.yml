@@ -80,14 +80,49 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Fail if version already exists on npm
+      - name: Check npm publish credentials
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${NODE_AUTH_TOKEN:-}" ]]; then
+            echo "Missing required repository secret: NPM_TOKEN" >&2
+            echo "Add an npm automation token in GitHub repository settings before rerunning CD." >&2
+            exit 1
+          fi
+
+          npm whoami
+
+      - name: Check npm package version
+        id: npm_version
         shell: bash
         run: |
           set -euo pipefail
 
           if npm view "${{ steps.release.outputs.package_name }}@${{ steps.release.outputs.version }}" version >/dev/null 2>&1; then
-            echo "Version ${{ steps.release.outputs.version }} is already published to npm" >&2
-            exit 1
+            echo "Version ${{ steps.release.outputs.version }} is already published to npm"
+            echo "exists=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "Version ${{ steps.release.outputs.version }} is not published to npm yet"
+            echo "exists=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Check GitHub Release
+        id: github_release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "${{ steps.release.outputs.tag }}" >/dev/null 2>&1; then
+            echo "GitHub Release ${{ steps.release.outputs.tag }} already exists"
+            echo "exists=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "GitHub Release ${{ steps.release.outputs.tag }} does not exist yet"
+            echo "exists=false" >> "${GITHUB_OUTPUT}"
           fi
 
       - name: Build
@@ -102,25 +137,14 @@ jobs:
       - name: Verify publish artifact
         run: env npm_config_cache=/tmp/claude-proxy-npm-cache npm pack --dry-run
 
-      - name: Check npm publish credentials
-        shell: bash
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          if [[ -z "${NODE_AUTH_TOKEN:-}" ]]; then
-            echo "Missing required repository secret: NPM_TOKEN" >&2
-            echo "Add an npm automation token in GitHub repository settings before rerunning CD." >&2
-            exit 1
-          fi
-
       - name: Publish package to npm
+        if: steps.npm_version.outputs.exists != 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish
 
       - name: Publish GitHub Release
+        if: steps.github_release.outputs.exists != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release.outputs.tag }}

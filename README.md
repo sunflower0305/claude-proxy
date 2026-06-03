@@ -65,7 +65,7 @@ Provider defaults:
 | Provider                 | Model env        | Default model            |
 | ------------------------ | ---------------- | ------------------------ |
 | **`deepseek` (default)** | `DEEPSEEK_MODEL` | **`deepseek-v4-pro`**    |
-| `qwen`                   | `QWEN_MODEL`     | `qwen-plus`              |
+| `qwen`                   | `QWEN_MODEL`     | `qwen3.7-plus`           |
 | `glm`                    | `GLM_MODEL`      | `glm-5.1`                |
 | `minimax`                | `MINIMAX_MODEL`  | `minimax-m3`             |
 | `kimi`                   | `KIMI_MODEL`     | `kimi-k2.6`              |

@@ -39,7 +39,7 @@ export function getProviderDefinitions(): ProviderDefinition[] {
       apiKey: pickEnv("QWEN_API_KEY", "DASHSCOPE_API_KEY"),
       baseUrl:
         pickEnv("QWEN_ANTHROPIC_BASE_URL") || "https://dashscope.aliyuncs.com/apps/anthropic",
-      model: pickEnv("QWEN_MODEL") || "qwen-plus",
+      model: pickEnv("QWEN_MODEL") || "qwen3.7-plus",
     },
     {
       key: "glm",

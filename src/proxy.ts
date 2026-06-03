@@ -65,7 +65,7 @@ const PROVIDERS = {
   qwen: {
     baseUrl: pickEnv("QWEN_ANTHROPIC_BASE_URL") || "https://dashscope.aliyuncs.com/apps/anthropic",
     apiKey: process.env.QWEN_API_KEY || "",
-    model: pickEnv("QWEN_MODEL") || "qwen-plus",
+    model: pickEnv("QWEN_MODEL") || "qwen3.7-plus",
   },
   glm: {
     baseUrl: pickEnv("GLM_ANTHROPIC_BASE_URL") || "https://open.bigmodel.cn/api/anthropic",

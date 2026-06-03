@@ -55,7 +55,7 @@ export function getProviderDefinitions(): ProviderDefinition[] {
       apiKeyEnv: ["MINIMAX_API_KEY"],
       apiKey: pickEnv("MINIMAX_API_KEY"),
       baseUrl: pickEnv("MINIMAX_ANTHROPIC_BASE_URL") || "https://api.minimaxi.com/anthropic",
-      model: pickEnv("MINIMAX_MODEL") || "minimax-m2.7-highspeed",
+      model: pickEnv("MINIMAX_MODEL") || "minimax-m3",
     },
     {
       key: "kimi",

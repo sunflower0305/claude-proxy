@@ -67,7 +67,7 @@ Provider defaults:
 | **`deepseek` (default)** | `DEEPSEEK_MODEL` | **`deepseek-v4-pro`**    |
 | `qwen`                   | `QWEN_MODEL`     | `qwen-plus`              |
 | `glm`                    | `GLM_MODEL`      | `glm-5.1`                |
-| `minimax`                | `MINIMAX_MODEL`  | `minimax-m2.7-highspeed` |
+| `minimax`                | `MINIMAX_MODEL`  | `minimax-m3`             |
 | `kimi`                   | `KIMI_MODEL`     | `kimi-k2.6`              |
 | `mimo`                   | `MIMO_MODEL`     | `mimo-v2.5-pro`          |
 

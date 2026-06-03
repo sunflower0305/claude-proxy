@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - 2026-06-03
+
+Patch release of `@sunflower0305/claude-proxy`.
+
+### Changed
+
+- default Qwen upstream model changed from `qwen-plus` to `qwen3.7-plus`
+- default MiniMax upstream model changed from `minimax-m2.7-highspeed` to `minimax-m3`
+- README and `.env.example` now document the upgraded provider defaults
+
+Detailed release notes: [docs/releases/1.3.1.md](docs/releases/1.3.1.md)
+
 ## [1.3.0] - 2026-05-06
 
 Minor release of `@sunflower0305/claude-proxy`.

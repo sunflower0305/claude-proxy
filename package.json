@@ -47,11 +47,11 @@
     "access": "public"
   },
   "scripts": {
-    "dev": "tsx watch src/proxy.ts",
+    "dev": "vp dev",
     "build": "vp pack",
     "start": "node dist/proxy.js",
-    "prepack": "npm run build",
-    "prepublishOnly": "npm run test:proxy-local",
+    "prepack": "vp pack",
+    "prepublishOnly": "vp test run tests/integration/proxy-local.test.ts",
     "check": "vp check",
     "check:fix": "vp check --fix",
     "lint": "vp lint",

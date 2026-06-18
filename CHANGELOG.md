@@ -2,13 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.4.0] - 2026-06-18
+
+Minor release of `@sunflower0305/claude-proxy`.
+
+### Added
+
+- optional local request and response capture logging for `POST /v1/messages`
+- configurable capture directory and default redaction of authorization and API key headers
 
 ### Changed
 
 - default GLM upstream model changed from `glm-5.1` to `glm-5.2`
 - default Kimi upstream model changed from `kimi-k2.6` to `kimi-k2.7-code`
-- README, `.env.example`, and provider test defaults now document the upgraded models
+- upgraded Express to version 5 and refreshed the TypeScript, Vitest, and Vite+ toolchain
+- README and `.env.example` now document capture logging and the upgraded provider defaults
+
+Detailed release notes: [docs/releases/1.4.0.md](docs/releases/1.4.0.md)
 
 ## [1.3.1] - 2026-06-03
 

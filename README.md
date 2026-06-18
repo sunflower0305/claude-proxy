@@ -51,6 +51,9 @@ Available variables:
 | `PROVIDER`                                                                                                                                                             | Active provider. Defaults to `deepseek`.                                     |
 | `PROXY_PORT`                                                                                                                                                           | Local server port. Defaults to `8080`.                                       |
 | `PROXY_API_KEY`                                                                                                                                                        | Optional local proxy token for `POST /v1/messages` and `POST /api/provider`. |
+| `CLAUDE_PROXY_LOG`                                                                                                                                                     | Enable local request/response capture logging. Disabled by default.          |
+| `CLAUDE_PROXY_LOG_DIR`                                                                                                                                                 | Capture directory. Defaults to `.claude-proxy/sessions`.                     |
+| `CLAUDE_PROXY_REDACT`                                                                                                                                                  | Redact authorization and API key headers. Enabled by default.                |
 | `QWEN_API_KEY`                                                                                                                                                         | API key for Qwen.                                                            |
 | `DEEPSEEK_API_KEY`                                                                                                                                                     | API key for DeepSeek.                                                        |
 | `GLM_API_KEY`                                                                                                                                                          | API key for GLM.                                                             |
@@ -70,6 +73,29 @@ Provider defaults:
 | `minimax`                | `MINIMAX_MODEL`  | `minimax-m3`          |
 | `kimi`                   | `KIMI_MODEL`     | `kimi-k2.7-code`      |
 | `mimo`                   | `MIMO_MODEL`     | `mimo-v2.5-pro`       |
+
+### Local Capture Logging
+
+Capture logging is disabled by default. Enable it only for local debugging in a
+trusted environment:
+
+```dotenv
+CLAUDE_PROXY_LOG=1
+CLAUDE_PROXY_LOG_DIR=.claude-proxy/sessions
+CLAUDE_PROXY_REDACT=1
+```
+
+Each completed, failed, or client-aborted `POST /v1/messages` request is written
+as one JSON file. With redaction enabled, `Authorization` and `x-api-key`
+headers are replaced with `[REDACTED]`.
+
+Capture files still contain complete request and response bodies. Prompts,
+messages, tool inputs and outputs, metadata, generated content, and other
+sensitive payload data are not redacted. The capture store currently has no
+body-size limit, file rotation, or retention policy, so long-running streams and
+repeated requests can consume memory and disk space. Use this feature only for
+short-lived debugging, protect the capture directory, and remove captures when
+they are no longer needed.
 
 You can use the bundled example as a starting point:
 

@@ -62,14 +62,14 @@ Available variables:
 
 Provider defaults:
 
-| Provider                 | Model env        | Default model            |
-| ------------------------ | ---------------- | ------------------------ |
-| **`deepseek` (default)** | `DEEPSEEK_MODEL` | **`deepseek-v4-pro`**    |
-| `qwen`                   | `QWEN_MODEL`     | `qwen3.7-plus`           |
-| `glm`                    | `GLM_MODEL`      | `glm-5.1`                |
-| `minimax`                | `MINIMAX_MODEL`  | `minimax-m3`             |
-| `kimi`                   | `KIMI_MODEL`     | `kimi-k2.6`              |
-| `mimo`                   | `MIMO_MODEL`     | `mimo-v2.5-pro`          |
+| Provider                 | Model env        | Default model         |
+| ------------------------ | ---------------- | --------------------- |
+| **`deepseek` (default)** | `DEEPSEEK_MODEL` | **`deepseek-v4-pro`** |
+| `qwen`                   | `QWEN_MODEL`     | `qwen3.7-plus`        |
+| `glm`                    | `GLM_MODEL`      | `glm-5.2`             |
+| `minimax`                | `MINIMAX_MODEL`  | `minimax-m3`          |
+| `kimi`                   | `KIMI_MODEL`     | `kimi-k2.7-code`      |
+| `mimo`                   | `MIMO_MODEL`     | `mimo-v2.5-pro`       |
 
 You can use the bundled example as a starting point:
 

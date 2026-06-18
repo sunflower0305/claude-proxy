@@ -10,3 +10,4 @@ coverage/
 !CHANGELOG.md
 .claude-proxy
 .claude
+artifacts/

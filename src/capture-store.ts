@@ -49,13 +49,15 @@ interface CaptureStoreOptions {
   redact: boolean;
 }
 
+export interface CaptureSession {
+  setResponse(status: number, headers: Headers): void;
+  append(chunk: Uint8Array | string): void;
+  complete(): void;
+  fail(error: unknown, extra?: Pick<CaptureResponse, "aborted">): void;
+}
+
 export interface CaptureStore {
-  readonly enabled: boolean;
-  readonly root?: string;
-  readonly sessionId?: string;
-  begin(input: CaptureStart): CaptureEntry | null;
-  complete(entry: CaptureEntry | null, response: CaptureResponse): void;
-  fail(entry: CaptureEntry | null, error: unknown, extra?: Partial<CaptureResponse>): void;
+  begin(input: CaptureStart): CaptureSession;
 }
 
 const SENSITIVE_HEADERS = new Set(["authorization", "x-api-key"]);
@@ -95,7 +97,7 @@ function padSeq(seq: number): string {
 }
 
 function normalizeHeaders(headers: Record<string, HeaderValue> | undefined) {
-  return { ...(headers ?? {}) };
+  return { ...headers };
 }
 
 function redactHeaders(headers: Record<string, HeaderValue>, redact: boolean) {
@@ -116,22 +118,76 @@ function errorMessage(error: unknown): string {
   return String(error);
 }
 
-class FileCaptureStore implements CaptureStore {
-  readonly enabled = true;
-  readonly root: string;
-  readonly sessionId: string;
-  private readonly sessionDir: string;
-  private readonly redact: boolean;
-  private seq = 0;
+class FileCaptureSession implements CaptureSession {
+  private readonly chunks: Buffer[] = [];
+  private readonly response: Partial<CaptureResponse> = {};
+  private firstByteAt: number | undefined;
+  private settled = false;
 
-  constructor(options: CaptureStoreOptions) {
-    this.root = options.root;
-    this.redact = options.redact;
-    this.sessionId = localTimestamp();
-    this.sessionDir = path.join(this.root, this.sessionId);
+  constructor(
+    private readonly entry: CaptureEntry,
+    private readonly filePath: string,
+    private readonly redact: boolean,
+  ) {}
+
+  setResponse(status: number, headers: Headers): void {
+    if (this.settled) return;
+    this.response.status = status;
+    this.response.headers = redactHeaders(Object.fromEntries(headers.entries()), this.redact);
   }
 
-  begin(input: CaptureStart): CaptureEntry | null {
+  append(chunk: Uint8Array | string): void {
+    if (this.settled) return;
+    if (this.firstByteAt === undefined) this.firstByteAt = Date.now();
+    this.chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  complete(): void {
+    this.finish();
+  }
+
+  fail(error: unknown, extra: Pick<CaptureResponse, "aborted"> = {}): void {
+    this.finish({
+      ...extra,
+      error: errorMessage(error),
+    });
+  }
+
+  private finish(extra: Partial<CaptureResponse> = {}): void {
+    if (this.settled) return;
+    this.settled = true;
+
+    const includeBody =
+      this.response.status !== undefined || this.chunks.length > 0 || extra.aborted === true;
+    const raw = includeBody ? Buffer.concat(this.chunks) : undefined;
+
+    this.entry.response = {
+      ...this.response,
+      ...(raw && { raw: raw.toString("utf8"), bytes: raw.byteLength }),
+      ...(this.firstByteAt !== undefined && { firstByteAt: this.firstByteAt }),
+      ...extra,
+      finishedAt: Date.now(),
+    };
+
+    try {
+      mkdirSync(path.dirname(this.filePath), { recursive: true });
+      writeFileSync(this.filePath, `${JSON.stringify(this.entry, null, 2)}\n`);
+    } catch (error) {
+      console.warn("[CaptureStore] Failed to persist capture:", errorMessage(error));
+    }
+  }
+}
+
+class FileCaptureStore implements CaptureStore {
+  private readonly sessionId = localTimestamp();
+  private readonly sessionDir: string;
+  private seq = 0;
+
+  constructor(private readonly options: CaptureStoreOptions) {
+    this.sessionDir = path.join(options.root, this.sessionId);
+  }
+
+  begin(input: CaptureStart): CaptureSession {
     const seq = ++this.seq;
     const startedAt = input.startedAt ?? Date.now();
     const entry: CaptureEntry = {
@@ -146,61 +202,38 @@ class FileCaptureStore implements CaptureStore {
       startedAt,
       request: {
         ...input.request,
-        headers: redactHeaders(input.request.headers, this.redact),
+        headers: redactHeaders(input.request.headers, this.options.redact),
       },
       response: null,
     };
 
-    this.persist(entry);
-    return entry;
-  }
-
-  complete(entry: CaptureEntry | null, response: CaptureResponse): void {
-    if (!entry) return;
-    entry.response = {
-      ...response,
-      headers: redactHeaders(response.headers ?? {}, this.redact),
-    };
-    this.persist(entry);
-  }
-
-  fail(entry: CaptureEntry | null, error: unknown, extra: Partial<CaptureResponse> = {}): void {
-    if (!entry) return;
-    this.complete(entry, {
-      ...extra,
-      error: errorMessage(error),
-      finishedAt: extra.finishedAt ?? Date.now(),
-    });
-  }
-
-  private persist(entry: CaptureEntry): void {
-    try {
-      mkdirSync(this.sessionDir, { recursive: true });
-      writeFileSync(
-        path.join(this.sessionDir, `${padSeq(entry.seq)}.json`),
-        `${JSON.stringify(entry, null, 2)}\n`,
-      );
-    } catch (error) {
-      console.warn("[CaptureStore] Failed to persist capture:", errorMessage(error));
-    }
+    return new FileCaptureSession(
+      entry,
+      path.join(this.sessionDir, `${padSeq(seq)}.json`),
+      this.options.redact,
+    );
   }
 }
 
-const disabledCaptureStore: CaptureStore = {
-  enabled: false,
-  begin: () => null,
+const disabledCaptureSession: CaptureSession = {
+  setResponse: () => {},
+  append: () => {},
   complete: () => {},
   fail: () => {},
+};
+
+const disabledCaptureStore: CaptureStore = {
+  begin: () => disabledCaptureSession,
 };
 
 export function createCaptureStoreFromEnv(env: NodeJS.ProcessEnv = process.env): CaptureStore {
   if (!isEnabled(env.CLAUDE_PROXY_LOG)) return disabledCaptureStore;
 
-  const root = path.resolve(env.CLAUDE_PROXY_LOG_DIR || ".claude-proxy/sessions");
-  const redact = !isRedactionDisabled(env.CLAUDE_PROXY_REDACT);
-
   try {
-    return new FileCaptureStore({ root, redact });
+    return new FileCaptureStore({
+      root: path.resolve(env.CLAUDE_PROXY_LOG_DIR || ".claude-proxy/sessions"),
+      redact: !isRedactionDisabled(env.CLAUDE_PROXY_REDACT),
+    });
   } catch (error) {
     console.warn("[CaptureStore] Failed to initialize capture store:", errorMessage(error));
     return disabledCaptureStore;

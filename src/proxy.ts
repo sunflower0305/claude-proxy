@@ -71,7 +71,7 @@ const PROVIDERS = {
   glm: {
     baseUrl: pickEnv("GLM_ANTHROPIC_BASE_URL") || "https://open.bigmodel.cn/api/anthropic",
     apiKey: process.env.GLM_API_KEY || "",
-    model: pickEnv("GLM_MODEL") || "glm-5.1",
+    model: pickEnv("GLM_MODEL") || "glm-5.2",
   },
   minimax: {
     baseUrl: pickEnv("MINIMAX_ANTHROPIC_BASE_URL") || "https://api.minimaxi.com/anthropic",
@@ -81,7 +81,7 @@ const PROVIDERS = {
   kimi: {
     baseUrl: pickEnv("KIMI_ANTHROPIC_BASE_URL") || "https://api.moonshot.cn/anthropic",
     apiKey: process.env.KIMI_API_KEY || "",
-    model: pickEnv("KIMI_MODEL") || "kimi-k2.6",
+    model: pickEnv("KIMI_MODEL") || "kimi-k2.7-code",
   },
   mimo: {
     baseUrl: pickEnv("MIMO_ANTHROPIC_BASE_URL") || "https://api.xiaomimimo.com/anthropic",

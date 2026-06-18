@@ -47,7 +47,7 @@ export function getProviderDefinitions(): ProviderDefinition[] {
       apiKeyEnv: ["GLM_API_KEY"],
       apiKey: pickEnv("GLM_API_KEY"),
       baseUrl: pickEnv("GLM_ANTHROPIC_BASE_URL") || "https://open.bigmodel.cn/api/anthropic",
-      model: pickEnv("GLM_MODEL") || "glm-5",
+      model: pickEnv("GLM_MODEL") || "glm-5.2",
     },
     {
       key: "minimax",
@@ -63,7 +63,7 @@ export function getProviderDefinitions(): ProviderDefinition[] {
       apiKeyEnv: ["KIMI_API_KEY"],
       apiKey: pickEnv("KIMI_API_KEY"),
       baseUrl: pickEnv("KIMI_ANTHROPIC_BASE_URL") || "https://api.moonshot.cn/anthropic",
-      model: pickEnv("KIMI_MODEL") || "kimi-k2.5",
+      model: pickEnv("KIMI_MODEL") || "kimi-k2.7-code",
     },
     {
       key: "mimo",

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- default GLM upstream model changed from `glm-5.1` to `glm-5.2`
+- default Kimi upstream model changed from `kimi-k2.6` to `kimi-k2.7-code`
+- README, `.env.example`, and provider test defaults now document the upgraded models
+
 ## [1.3.1] - 2026-06-03
 
 Patch release of `@sunflower0305/claude-proxy`.

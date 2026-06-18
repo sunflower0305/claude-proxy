@@ -16,6 +16,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { loadEnvFile } from "node:process";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
+import { createCaptureStoreFromEnv } from "./capture-store.js";
 
 if (existsSync(".env")) loadEnvFile(".env");
 
@@ -148,6 +149,10 @@ function copyUpstreamHeaders(upstream: Response, res: express.Response) {
   }
 }
 
+function responseHeadersToObject(upstream: Response): Record<string, string> {
+  return Object.fromEntries(upstream.headers.entries());
+}
+
 function createProxyError(message: string) {
   return {
     type: "error",
@@ -207,6 +212,7 @@ export function createApp(): express.Express {
   let currentProvider = getInitialProvider();
   let requestSequence = 0;
   const proxyApiKey = pickEnv("PROXY_API_KEY");
+  const captureStore = createCaptureStoreFromEnv();
 
   function getConfig(provider: ProviderKey = currentProvider): ProviderConfig {
     return getProviderConfig(provider);
@@ -278,6 +284,19 @@ export function createApp(): express.Express {
     const targetModel = getTargetModel(req.body?.model);
     const requestBody = buildUpstreamBody(req.body, targetModel);
     const trace = createRequestTrace(req.body?.model, targetModel, false);
+    const captureEntry = captureStore.begin({
+      provider: currentProvider,
+      requestedModel: trace.requestedModel,
+      targetModel,
+      stream: false,
+      startedAt: trace.startedAt,
+      request: {
+        method: req.method,
+        url: req.originalUrl || req.url,
+        headers: req.headers,
+        body: req.body,
+      },
+    });
 
     logTimingEvent(trace, "start");
 
@@ -295,12 +314,21 @@ export function createApp(): express.Express {
       const payload = Buffer.from(await upstream.arrayBuffer());
       copyUpstreamHeaders(upstream, res);
       res.status(upstream.status).send(payload);
+      captureStore.complete(captureEntry, {
+        status: upstream.status,
+        headers: responseHeadersToObject(upstream),
+        raw: payload.toString("utf8"),
+        bytes: payload.byteLength,
+        firstByteAt: Date.now(),
+        finishedAt: Date.now(),
+      });
       logTimingEvent(trace, "completed", {
         status: upstream.status,
         bytes: payload.byteLength,
       });
     } catch (error: any) {
       console.error("Request error:", error);
+      captureStore.fail(captureEntry, error);
       logTimingEvent(trace, "error", {
         message: error?.message || String(error),
       });
@@ -314,16 +342,37 @@ export function createApp(): express.Express {
     const requestBody = buildUpstreamBody(req.body, targetModel);
     const trace = createRequestTrace(req.body?.model, targetModel, true);
     const abortController = new AbortController();
+    const responseChunks: Buffer[] = [];
     let clientClosed = false;
     let streamCompleted = false;
     let sawFirstChunk = false;
+    let firstByteAt: number | undefined;
+    const captureEntry = captureStore.begin({
+      provider: currentProvider,
+      requestedModel: trace.requestedModel,
+      targetModel,
+      stream: true,
+      startedAt: trace.startedAt,
+      request: {
+        method: req.method,
+        url: req.originalUrl || req.url,
+        headers: req.headers,
+        body: req.body,
+      },
+    });
 
     logTimingEvent(trace, "start");
 
     res.on("close", () => {
-      if (streamCompleted) return;
+      if (streamCompleted || captureEntry?.response) return;
       clientClosed = true;
       abortController.abort();
+      captureStore.fail(captureEntry, "client aborted", {
+        aborted: true,
+        raw: Buffer.concat(responseChunks).toString("utf8"),
+        bytes: responseChunks.reduce((total, chunk) => total + chunk.byteLength, 0),
+        firstByteAt,
+      });
       logTimingEvent(trace, "client_aborted");
     });
 
@@ -345,6 +394,13 @@ export function createApp(): express.Express {
       if (!upstream.body) {
         streamCompleted = true;
         res.end();
+        captureStore.complete(captureEntry, {
+          status: upstream.status,
+          headers: responseHeadersToObject(upstream),
+          raw: "",
+          bytes: 0,
+          finishedAt: Date.now(),
+        });
         logTimingEvent(trace, "completed", {
           status: upstream.status,
           bytes: 0,
@@ -355,19 +411,28 @@ export function createApp(): express.Express {
 
       const upstreamStream = Readable.fromWeb(upstream.body as any);
       upstreamStream.on("data", (chunk) => {
-        if (sawFirstChunk) return;
-        sawFirstChunk = true;
-        const chunkSize = Buffer.isBuffer(chunk)
-          ? chunk.byteLength
-          : Buffer.byteLength(String(chunk));
-        logTimingEvent(trace, "first_chunk", {
-          status: upstream.status,
-          chunk_bytes: chunkSize,
-        });
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
+        responseChunks.push(buffer);
+
+        if (!sawFirstChunk) {
+          sawFirstChunk = true;
+          firstByteAt = Date.now();
+          logTimingEvent(trace, "first_chunk", {
+            status: upstream.status,
+            chunk_bytes: buffer.byteLength,
+          });
+        }
       });
       upstreamStream.on("error", (error) => {
         if (clientClosed) return;
         console.error("Upstream stream error:", error);
+        captureStore.fail(captureEntry, error, {
+          status: upstream.status,
+          headers: responseHeadersToObject(upstream),
+          raw: Buffer.concat(responseChunks).toString("utf8"),
+          bytes: responseChunks.reduce((total, chunk) => total + chunk.byteLength, 0),
+          firstByteAt,
+        });
         logTimingEvent(trace, "error", {
           status: upstream.status,
           message: error?.message || String(error),
@@ -380,6 +445,15 @@ export function createApp(): express.Express {
       await new Promise<void>((resolve, reject) => {
         upstreamStream.on("end", () => {
           streamCompleted = true;
+          const raw = Buffer.concat(responseChunks);
+          captureStore.complete(captureEntry, {
+            status: upstream.status,
+            headers: responseHeadersToObject(upstream),
+            raw: raw.toString("utf8"),
+            bytes: raw.byteLength,
+            firstByteAt,
+            finishedAt: Date.now(),
+          });
           logTimingEvent(trace, "completed", {
             status: upstream.status,
           });
@@ -397,6 +471,13 @@ export function createApp(): express.Express {
       }
 
       console.error("Request error:", error);
+      if (!captureEntry?.response) {
+        captureStore.fail(captureEntry, error, {
+          raw: Buffer.concat(responseChunks).toString("utf8"),
+          bytes: responseChunks.reduce((total, chunk) => total + chunk.byteLength, 0),
+          firstByteAt,
+        });
+      }
       logTimingEvent(trace, "error", {
         message: error?.message || String(error),
       });

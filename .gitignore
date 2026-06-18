@@ -1,12 +1,12 @@
 node_modules/
 dist/
 coverage/
-CLAUDE.md
-AGENTS.md
 .env
 .artifacts/
 .npmrc
 .trae/
-fix.md
-review.md
+/*.md
+!README.md
+!CHANGELOG.md
 .claude-proxy
+.claude

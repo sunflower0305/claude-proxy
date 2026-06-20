@@ -12,6 +12,8 @@
 
 It currently supports `qwen`, `deepseek`, `glm`, `minimax`, `kimi`, and `mimo`.
 
+Introduction Blog：[https://blog.zhangleyang.com/2026-05-31-aainct](https://blog.zhangleyang.com/2026-06-18-c-yi-g)
+
 ## Install
 
 Requires Node.js 20.12 or newer.

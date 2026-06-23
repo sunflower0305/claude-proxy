@@ -11,3 +11,6 @@ coverage/
 .claude-proxy
 .claude
 artifacts/
+assets/
+docs/whiteboards/
+scripts/

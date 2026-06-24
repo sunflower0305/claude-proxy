@@ -747,6 +747,83 @@ describe.sequential("proxy local integration", () => {
     }
   });
 
+  it("warns without throwing when a final capture cannot be persisted", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const store = createCaptureStoreFromEnv({
+      CLAUDE_PROXY_LOG: "1",
+      CLAUDE_PROXY_LOG_DIR: path.join("/dev/null", "claude-proxy-capture"),
+    });
+
+    try {
+      const session = store.begin({
+        provider: "deepseek",
+        requestedModel: "claude-sonnet-4-6",
+        targetModel: upstreamModel,
+        stream: false,
+        request: {
+          method: "POST",
+          url: "/v1/messages",
+          headers: {},
+          body: { model: "claude-sonnet-4-6" },
+        },
+      });
+
+      expect(() => session.complete()).not.toThrow();
+      expect(warnSpy).toHaveBeenCalledWith(
+        "[CaptureStore] Failed to persist capture:",
+        expect.stringContaining("not a directory"),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("falls back to a disabled capture store when initialization fails", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.resetModules();
+    vi.doMock("node:path", () => ({
+      default: {
+        resolve: () => {
+          throw new Error("resolve failed");
+        },
+      },
+    }));
+
+    try {
+      const { createCaptureStoreFromEnv: createStore } = await import("../../src/capture-store.js");
+      const store = createStore({
+        CLAUDE_PROXY_LOG: "1",
+        CLAUDE_PROXY_LOG_DIR: "capture-root",
+      });
+
+      expect(() => {
+        const session = store.begin({
+          provider: "deepseek",
+          requestedModel: "claude-sonnet-4-6",
+          targetModel: upstreamModel,
+          stream: false,
+          request: {
+            method: "POST",
+            url: "/v1/messages",
+            headers: {},
+            body: { model: "claude-sonnet-4-6" },
+          },
+        });
+        session.setResponse(200, new Headers());
+        session.append("ignored");
+        session.complete();
+      }).not.toThrow();
+      expect(warnSpy).toHaveBeenCalledWith(
+        "[CaptureStore] Failed to initialize capture store:",
+        "resolve failed",
+      );
+    } finally {
+      vi.doUnmock("node:path");
+      vi.resetModules();
+      warnSpy.mockRestore();
+    }
+  });
+
   it("captures non-streaming requests and responses when logging is enabled", async () => {
     await cleanupHarness?.close();
     const captureRoot = await mkdtemp(path.join(tmpdir(), "claude-proxy-capture-"));

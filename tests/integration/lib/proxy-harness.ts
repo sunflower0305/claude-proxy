@@ -105,7 +105,7 @@ export type TestEnvKey = (typeof testEnvKeys)[number];
 export type EnvOverrides = Partial<Record<TestEnvKey, string | undefined>>;
 export type CreateApp = () => { listen(port: number, hostname: string): Server };
 
-export function createSsePayload() {
+function createSsePayload() {
   return [
     'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_123","type":"message","role":"assistant","content":[],"model":"deepseek-chat-native","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":0}}}\n\n',
     'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',

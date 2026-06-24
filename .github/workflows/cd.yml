@@ -126,13 +126,13 @@ jobs:
           fi
 
       - name: Build
-        run: npm run build
+        run: pnpm run build
 
       - name: Run local integration tests
-        run: npm run test:proxy-local
+        run: pnpm run test:proxy-local
 
       - name: Generate coverage report
-        run: npm run test:coverage
+        run: pnpm run test:coverage
 
       - name: Verify publish artifact
         run: env npm_config_cache=/tmp/claude-proxy-npm-cache npm pack --dry-run

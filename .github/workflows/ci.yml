@@ -31,13 +31,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: npm run build
+        run: pnpm run build
 
       - name: Run local integration tests
-        run: npm run test:proxy-local
+        run: pnpm run test:proxy-local
 
       - name: Generate coverage report
-        run: npm run test:coverage
+        run: pnpm run test:coverage
 
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2

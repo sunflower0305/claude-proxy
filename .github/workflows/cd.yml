@@ -135,12 +135,14 @@ jobs:
         run: pnpm run test:coverage
 
       - name: Verify publish artifact
-        run: env npm_config_cache=/tmp/claude-proxy-npm-cache npm pack --dry-run
+        run: pnpm pack --dry-run
 
       - name: Publish package to npm
         if: steps.npm_version.outputs.exists != 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # Keep npm publish here: pnpm publish adds git clean/branch checks that
+        # are not equivalent for this tag-triggered release workflow.
         run: npm publish
 
       - name: Publish GitHub Release

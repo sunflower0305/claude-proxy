@@ -13,8 +13,9 @@
 It currently supports `qwen`, `deepseek`, `glm`, `minimax`, `kimi`, and `mimo`.
 
 Introduction Blog：
- - https://blog.zhangleyang.com/2026-06-18-c-yi-g
- - https://blog.zhangleyang.com/2026-06-24-7nknko
+
+- https://blog.zhangleyang.com/2026-06-18-c-yi-g
+- https://blog.zhangleyang.com/2026-06-24-7nknko
 
 ## Install
 

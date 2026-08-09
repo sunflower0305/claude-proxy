@@ -16,31 +16,27 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.30.1
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@v1
         with:
           node-version: 20
-          cache: pnpm
+          cache: true
+          run-install: false
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: vp install --frozen-lockfile
 
       - name: Run project checks
-        run: pnpm run check
+        run: vp check
 
       - name: Build
-        run: pnpm run build
+        run: vp pack
 
       - name: Run local integration tests
-        run: pnpm run test:proxy-local
+        run: vp run test:proxy-local
 
       - name: Generate coverage report
-        run: pnpm run test:coverage
+        run: vp run test:coverage
 
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2

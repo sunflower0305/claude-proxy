@@ -51,7 +51,7 @@
     "build": "vp pack",
     "start": "node dist/proxy.js",
     "prepack": "vp pack",
-    "prepublishOnly": "vp test run tests/integration/proxy-*.test.ts",
+    "prepublishOnly": "vp test run tests/integration/proxy-",
     "check": "vp check",
     "check:fix": "vp check --fix",
     "lint": "vp lint",
@@ -59,8 +59,8 @@
     "format": "vp fmt . --write",
     "format:check": "vp fmt --check",
     "test": "vp test",
-    "test:coverage": "vp test run tests/integration/proxy-*.test.ts --coverage",
-    "test:proxy-local": "vp test run tests/integration/proxy-*.test.ts",
+    "test:coverage": "vp test run tests/integration/proxy- --coverage",
+    "test:proxy-local": "vp test run tests/integration/proxy-",
     "test:provider-anthropic": "tsx tests/integration/provider-anthropic.ts",
     "test:provider-cli-e2e": "tsx tests/integration/provider-cli-e2e.ts",
     "report:provider-cli-e2e": "tsx tests/integration/report-provider-cli-e2e.ts"
@@ -70,12 +70,12 @@
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
-    "@types/node": "^25.9.4",
-    "@vitest/coverage-v8": "^4.1.9",
-    "tsx": "^4.22.4",
+    "@types/node": "^25.9.5",
+    "@vitest/coverage-v8": "^4.1.10",
+    "tsx": "^4.23.11",
     "typescript": "^6.0.3",
-    "vite-plus": "^0.2.1",
-    "vitest": "^4.1.9"
+    "vite-plus": "^0.2.8",
+    "vitest": "^4.1.10"
   },
   "engines": {
     "node": ">=20.12"

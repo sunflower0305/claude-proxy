@@ -26,16 +26,17 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@v1
         with:
-          version: 10.30.1
+          node-version: 20
+          cache: true
+          run-install: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 20
-          cache: pnpm
           registry-url: https://registry.npmjs.org
 
       - name: Resolve release metadata
@@ -78,7 +79,7 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: vp install --frozen-lockfile
 
       - name: Check npm publish credentials
         shell: bash
@@ -126,16 +127,16 @@ jobs:
           fi
 
       - name: Build
-        run: pnpm run build
+        run: vp pack
 
       - name: Run local integration tests
-        run: pnpm run test:proxy-local
+        run: vp run test:proxy-local
 
       - name: Generate coverage report
-        run: pnpm run test:coverage
+        run: vp run test:coverage
 
       - name: Verify publish artifact
-        run: pnpm pack --dry-run
+        run: vp exec npm pack --dry-run
 
       - name: Publish package to npm
         if: steps.npm_version.outputs.exists != 'true'
